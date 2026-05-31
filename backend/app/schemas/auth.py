@@ -48,6 +48,7 @@ class UserOut(BaseModel):
     full_name: str | None = None
     avatar_url: str | None = None
     is_verified: bool
+    is_admin: bool = False
     auth_provider: str
     tier: str
     storage_used_bytes: int

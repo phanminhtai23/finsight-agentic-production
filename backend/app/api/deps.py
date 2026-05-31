@@ -36,6 +36,7 @@ from app.repositories.document_repository import DocumentRepository
 from app.repositories.task_repository import TaskRepository
 from app.repositories.topic_repository import TopicRepository
 from app.repositories.user_repository import UserRepository
+from app.services.admin_service import AdminService
 from app.services.agent_service import AgentService
 from app.services.auth_service import AuthService
 from app.services.events import EventPublisher
@@ -222,6 +223,23 @@ async def enforce_user_rate_limit(
     if not settings.rate_limit_enabled:
         return
     await enforce_rate_limit(redis_client, f"user:{user.id}", settings.rate_limit_per_minute)
+
+
+# --- Admin ---
+async def require_admin(user: CurrentUserDep) -> User:
+    if not user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return user
+
+
+AdminUserDep = Annotated[User, Depends(require_admin)]
+
+
+def get_admin_service(session: SessionDep, settings: SettingsDep) -> AdminService:
+    return AdminService(session, get_qdrant_client(settings), settings)
+
+
+AdminServiceDep = Annotated[AdminService, Depends(get_admin_service)]
 
 
 # --- Topics ---

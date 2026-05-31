@@ -10,10 +10,14 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 
+import httpx
+
 from app.core.config import Settings
 from app.core.logging import get_logger
 
 log = get_logger(__name__)
+
+_RESEND_ENDPOINT = "https://api.resend.com/emails"
 
 
 def _send_sync(settings: Settings, to: str, subject: str, text: str, html: str) -> None:
@@ -31,8 +35,29 @@ def _send_sync(settings: Settings, to: str, subject: str, text: str, html: str) 
         server.send_message(msg)
 
 
+async def _send_resend(settings: Settings, to: str, subject: str, text: str, html: str) -> None:
+    """Send via the Resend HTTPS API (port 443) — works where outbound SMTP is blocked."""
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.post(
+            _RESEND_ENDPOINT,
+            headers={"Authorization": f"Bearer {settings.resend_api_key}"},
+            json={
+                "from": settings.resend_from,
+                "to": [to],
+                "subject": subject,
+                "html": html,
+                "text": text,
+            },
+        )
+    resp.raise_for_status()
+
+
 async def send_email(settings: Settings, to: str, subject: str, text: str, html: str) -> None:
-    await asyncio.to_thread(_send_sync, settings, to, subject, text, html)
+    """Send an email — Resend (HTTPS) when configured, otherwise SMTP."""
+    if settings.resend_api_key:
+        await _send_resend(settings, to, subject, text, html)
+    else:
+        await asyncio.to_thread(_send_sync, settings, to, subject, text, html)
 
 
 async def send_verification_email(settings: Settings, to: str, link: str) -> None:

@@ -69,9 +69,15 @@ class Settings(BaseSettings):
     smtp_password: str | None = None
     email_from: str = "no-reply@finsight.local"
 
+    # --- Email via Resend HTTPS API (preferred on hosts that block SMTP ports, e.g. DigitalOcean) ---
+    resend_api_key: str | None = None
+    # Use a verified-domain sender in production (e.g. no-reply@finsightagent.tech).
+    # "onboarding@resend.dev" works without domain verification but only delivers to the account owner.
+    resend_from: str = "onboarding@resend.dev"
+
     @property
     def emails_enabled(self) -> bool:
-        return bool(self.smtp_host and self.smtp_user)
+        return bool(self.resend_api_key or (self.smtp_host and self.smtp_user))
 
     @property
     def google_oauth_enabled(self) -> bool:
