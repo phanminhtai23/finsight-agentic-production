@@ -14,10 +14,16 @@ from app.agents import prompts
 from app.agents.nodes import RetrieverFactory, build_citations, format_evidence
 from app.agents.state import EvidenceItem
 from app.agents.web import WebSearch
+from app.core.config import get_settings
+from app.core.guardrails import apply_output_disclaimer, check_input, refusal_message
 from app.core.llm import stream_chat
+from app.core.logging import get_logger
+from app.core.metrics import guardrail_blocks_total
 from app.rag.ports import TextGenerator
 from app.repositories.conversation_repository import ConversationRepository
 from app.services.visualization_service import VisualizationService, wants_chart
+
+log = get_logger(__name__)
 
 
 class StreamingChatService:
@@ -45,6 +51,29 @@ class StreamingChatService:
     ) -> AsyncIterator[dict]:
         evidence: list[EvidenceItem] = []
         tools: list[str] = []  # tool names the agent invoked this turn
+        settings = get_settings()
+
+        # --- Input guardrail: refuse empty / over-long / prompt-injection before hitting the LLM.
+        if settings.guardrails_enabled:
+            check = check_input(message, max_chars=settings.max_input_chars)
+            if not check.allowed:
+                reason_key = (check.reason or "unknown").split(":", 1)[0]
+                guardrail_blocks_total.labels(reason_key).inc()
+                log.warning("guardrail_blocked_input", reason=check.reason)
+                refusal = refusal_message(check.reason or "")
+                yield {"type": "token", "token": refusal}
+                yield {"type": "citations", "citations": []}
+                yield {"type": "tools", "tools": []}
+                async with self._sessionmaker() as session:
+                    repo = ConversationRepository(session)
+                    await repo.add_message(conversation_id, role="user", content=message)
+                    await repo.add_message(conversation_id, role="assistant", content=refusal)
+                    await session.commit()
+                yield {"type": "done"}
+                return
+            if check.pii_types:
+                log.info("guardrail_redacted_pii", types=check.pii_types)
+            message = check.sanitized  # downstream uses the PII-redacted text
 
         # Retrieval is best-effort: a transient failure (e.g. embedding rate limit) should not
         # blank out the chat — we just answer with whatever evidence we have (possibly none).
@@ -102,6 +131,14 @@ class StreamingChatService:
         if not answer:
             answer = "I didn't get a response this time — please try again."
             yield {"type": "token", "token": answer}
+
+        # --- Output guardrail: append a not-financial-advice disclaimer to investment-style answers.
+        if settings.guardrails_enabled:
+            with_disclaimer = apply_output_disclaimer(answer)
+            if with_disclaimer != answer:
+                yield {"type": "token", "token": with_disclaimer[len(answer) :]}
+                answer = with_disclaimer
+
         citations = [dict(c) for c in build_citations(evidence)]
         yield {"type": "citations", "citations": citations}
 
