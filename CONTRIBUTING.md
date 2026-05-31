@@ -19,6 +19,12 @@ npm install
 Copy `.env.example` to `.env` and set at least `GOOGLE_API_KEY`. See [README.md](README.md) for the
 full Docker-based workflow.
 
+Enable the git hooks once so lint/format run automatically on every commit:
+
+```bash
+pre-commit install
+```
+
 ## Quality bar (enforced in CI)
 
 Before opening a pull request, make sure these pass locally — the same checks run in
