@@ -39,10 +39,10 @@ echo '/swapfile none swap sw 0 0' >> /etc/fstab
 
 ## 3. Get the code onto the server
 
-**Option A — clone from GitHub (push `finsight-production` first):**
+**Option A — clone from GitHub:**
 ```bash
-git clone https://github.com/phanminhtai23/finsight-production.git
-cd finsight-production
+git clone https://github.com/phanminhtai23/finsight-agentic-production.git
+cd finsight-agentic-production
 ```
 
 **Option B — copy from your PC (run in CMD on Windows, not on the server):**

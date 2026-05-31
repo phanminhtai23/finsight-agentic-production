@@ -24,6 +24,20 @@ FinSight is a production-style, multi-agent system that answers financial questi
 
 It is built around a LangGraph supervisor orchestrating a team of specialized agents, a retrieval-augmented-generation (RAG) layer with advanced chunking and hybrid search, tools exposed through a dedicated **MCP server**, and an async task engine that lets you keep chatting while long jobs (document ingestion, deep research) run in the background.
 
+### 🌐 Live deployment
+
+| | URL |
+|---|---|
+| **App (frontend)** | **https://finsightagent.tech** |
+| **API (backend)** | https://api.finsightagent.tech · health: [`/api/v1/health`](https://api.finsightagent.tech/api/v1/health) |
+
+**Deployed with:**
+- **Frontend** → **Vercel** (Hobby) — auto-deploy from GitHub, HTTPS, SPA via [`frontend/vercel.json`](frontend/vercel.json).
+- **Backend** → **DigitalOcean droplet** (Ubuntu 24.04, 4 GB / 2 vCPU) running the full stack via **Docker Compose** ([`docker-compose.prod.yml`](docker-compose.prod.yml), hardened [`Dockerfile.prod`](backend/Dockerfile.prod)), behind **Nginx** reverse proxy + **Let's Encrypt** TLS (certbot).
+- **CI/CD** → **GitHub Actions**: [CI](.github/workflows/ci.yml) (ruff + pytest + build) and [CD](.github/workflows/deploy.yml) (auto-deploy to the droplet over SSH on green main).
+
+Full step-by-step in **[DEPLOY.md](DEPLOY.md)**.
+
 ---
 
 ## 🧪 Quick demo (for reviewers)
@@ -276,7 +290,7 @@ If you reference FinSight, please cite:
   author  = {Phan Minh Tai},
   title   = {FinSight: A Production-Hardened Multi-Agent Financial Research Assistant},
   year    = {2026},
-  url      = {https://github.com/phanminhtai23/finsight-production},
+  url      = {https://github.com/phanminhtai23/finsight-agentic-production},
   note     = {Ready Tensor AAIDC — Module 3 (Agentic AI in Production)}
 }
 ```

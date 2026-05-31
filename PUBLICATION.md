@@ -5,7 +5,8 @@
 # FinSight in Production — Hardening a Multi-Agent Financial Assistant with Reliability, Guardrails & Observability
 
 > **AAIDC Module 3 — Agentic AI in Production.**
-> Repository: https://github.com/phanminhtai23/finsight-production
+> 🌐 **Live app:** https://finsightagent.tech · **API:** https://api.finsightagent.tech/api/v1/health
+> 📦 **Repository:** https://github.com/phanminhtai23/finsight-agentic-production
 > Builds on the Module 2 multi-agent system: https://github.com/phanminhtai23/finsight-multi-agent
 
 ## TL;DR
@@ -146,7 +147,7 @@ before logging. Intended use, limitations and risk mitigations are documented in
 
 ---
 
-**Repository:** https://github.com/phanminhtai23/finsight-production ·
+**Repository:** https://github.com/phanminhtai23/finsight-agentic-production ·
 **Docs:** [README](README.md) · [PRODUCTION.md](docs/PRODUCTION.md) · [MODEL_CARD.md](docs/MODEL_CARD.md) ·
 **Contact:** Phan Minh Tai — phanminhtai23@gmail.com
 
