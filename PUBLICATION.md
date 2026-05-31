@@ -69,8 +69,10 @@ block. → `app/core/ratelimit.py`.
   `GOOGLE_API_KEY` (fail-fast validation in `config.py`).
 - A **hardened image** (`backend/Dockerfile.prod`): multi-stage, non-root, container `HEALTHCHECK`,
   multi-worker uvicorn — and a production `docker-compose.prod.yml` (built images, restart policies).
-- **CI** (`.github/workflows/ci.yml`): ruff lint + format check + pytest-with-coverage on the
-  backend, and tsc + vite build on the frontend, on every push/PR.
+- **CI/CD** — [`ci.yml`](.github/workflows/ci.yml) runs **automated tests on every push for both
+  backend and frontend** (backend: ruff + pytest-with-coverage; frontend: tsc typecheck + Vite
+  build); [`deploy.yml`](.github/workflows/deploy.yml) then **auto-deploys** the backend to the
+  droplet over SSH once CI is green.
 
 ## Architecture
 

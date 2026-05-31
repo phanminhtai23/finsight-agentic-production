@@ -34,7 +34,7 @@ It is built around a LangGraph supervisor orchestrating a team of specialized ag
 **Deployed with:**
 - **Frontend** → **Vercel** (Hobby) — auto-deploy from GitHub, HTTPS, SPA via [`frontend/vercel.json`](frontend/vercel.json).
 - **Backend** → **DigitalOcean droplet** (Ubuntu 24.04, 4 GB / 2 vCPU) running the full stack via **Docker Compose** ([`docker-compose.prod.yml`](docker-compose.prod.yml), hardened [`Dockerfile.prod`](backend/Dockerfile.prod)), behind **Nginx** reverse proxy + **Let's Encrypt** TLS (certbot).
-- **CI/CD** → **GitHub Actions**: [CI](.github/workflows/ci.yml) (ruff + pytest + build) and [CD](.github/workflows/deploy.yml) (auto-deploy to the droplet over SSH on green main).
+- **CI/CD** → **GitHub Actions**: [CI](.github/workflows/ci.yml) **runs automated tests on every push for both backend and frontend** (backend: ruff lint + `pytest` with coverage; frontend: TypeScript typecheck + Vite build), and [CD](.github/workflows/deploy.yml) **auto-deploys the backend** to the droplet over SSH once CI is green.
 
 Full step-by-step in **[DEPLOY.md](DEPLOY.md)**.
 
@@ -94,7 +94,7 @@ Module 3 takes the system from "works" to "operable". Full details + how to veri
 - **Health & readiness** — `/health` (liveness) and `/readiness` (checks Postgres, Redis, Qdrant).
 - **Rate limiting** — Redis fixed-window, per-user, fail-open. ([`ratelimit.py`](backend/app/core/ratelimit.py))
 - **Secure by default** — app refuses to boot in prod with a weak `JWT_SECRET` or missing keys; non-root multi-worker [`Dockerfile.prod`](backend/Dockerfile.prod) + [`docker-compose.prod.yml`](docker-compose.prod.yml).
-- **CI/CD** — [GitHub Actions](.github/workflows/ci.yml): ruff + pytest (coverage) + frontend build on every push/PR.
+- **CI/CD** — [GitHub Actions](.github/workflows/ci.yml) **auto-tests backend + frontend on every push** (ruff + pytest/coverage; tsc + Vite build) and [auto-deploys](.github/workflows/deploy.yml) the backend to the droplet over SSH when main is green.
 - **Evaluation** — answer-quality eval vs baseline (LangSmith) **and** an offline adversarial **safety eval** (injection 5/5, PII 2/2): `python -m evals.run_safety_eval`.
 
 ## 🏗️ Architecture
