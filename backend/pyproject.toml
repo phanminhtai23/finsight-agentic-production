@@ -1,7 +1,7 @@
 [project]
 name = "finsight"
 version = "0.1.0"
-description = "FinSight — Multi-Agent Financial Research Assistant (Ready Tensor AAIDC Module 2)"
+description = "FinSight — Production-Hardened Multi-Agent Financial Research Assistant (Ready Tensor AAIDC Module 3)"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [

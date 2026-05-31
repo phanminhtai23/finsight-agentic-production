@@ -2,162 +2,109 @@
   <img src="https://raw.githubusercontent.com/phanminhtai23/finsight-multi-agent/main/frontend/public/logo.svg" width="96" alt="FinSight logo" />
 </p>
 
-# FinSight — A Multi-Agent Financial Research Assistant with RAG, MCP Tools, and Grounded Citations
+# FinSight in Production — Hardening a Multi-Agent Financial Assistant with Reliability, Guardrails & Observability
 
-> **AAIDC Module 2 — Build Your Multi-Agent System.**
-> Repository: https://github.com/phanminhtai23/finsight-multi-agent
+> **AAIDC Module 3 — Agentic AI in Production.**
+> Repository: https://github.com/phanminhtai23/finsight-production
+> Builds on the Module 2 multi-agent system: https://github.com/phanminhtai23/finsight-multi-agent
 
 ## TL;DR
 
-FinSight is a production-style, multi-agent system that answers financial questions about **any
-company** — from documents you upload (PDF / Word / scanned images) or from **live web sources**
-— and **always answers with inline citations** back to the exact source. A LangGraph supervisor
-coordinates six specialized agents over a retrieval-augmented-generation (RAG) layer backed by
-**Qdrant**, with tools exposed through a dedicated **Model Context Protocol (MCP)** server. Long
-jobs (document ingestion) run asynchronously so the user can keep chatting. A full **React** app
-wraps it with auth, **token streaming**, a live "thinking" view, on-the-fly **charts**, and
-per-topic knowledge bases. The whole stack runs with one `docker compose up` and is verified
-end-to-end.
+**FinSight** is a multi-agent financial research assistant (LangGraph supervisor + Retrieval,
+Market Research, Analyst, Writer, Critic agents over a Qdrant RAG layer, MCP tools, and grounded
+citations). Project 2 made it *work*. **Project 3 makes it *operable*** — I added the layers a real
+deployment needs: **reliability** (retries/timeouts around every model call), a **safety guardrail
+layer** (prompt-injection defense, PII redaction, advice disclaimer), **observability** (correlation
+ids, structured logs, Prometheus metrics, a consistent error envelope), **health/readiness probes**,
+**per-user rate limiting**, **fail-fast secure config**, **CI/CD**, a **hardened container**, and an
+**offline adversarial safety evaluation**. 69 automated tests gate the system.
 
-## The Problem
+## The Problem (Project 3 framing)
 
-Reading financial reports is slow, and generic chatbots are untrustworthy for finance: they
-hallucinate figures and can't show *where* a number came from. FinSight targets exactly this gap
-— grounded, **cited** answers that combine a user's private documents with live market research.
+A demo that calls an LLM and returns an answer is not a product. In production the model provider
+rate-limits you, users send adversarial or sensitive input, dependencies go down, and operators need
+to see *what happened* when something breaks. Project 3 is about closing exactly that gap on top of
+an existing agentic system — turning FinSight from "runs on my machine" into "safe to operate".
 
-## What FinSight Does
+## What I Added (the six pillars)
 
-- **Upload any document** (PDF, DOCX, scanned image) → it is parsed, OCR'd, chunked, embedded,
-  and indexed automatically (in the background).
-- **Ask questions in natural language** → a team of agents retrieves evidence, analyzes it,
-  writes the answer, and a Critic verifies it is grounded and cited.
-- **Researches the live web** (via MCP tools) for companies not in your documents.
-- **Every claim is cited** `[n]`, mapping to a document page (deep-linked on Cloudinary) or a web URL.
-- **Visualizes on demand** — ask to "plot" or "compare" and a Visualization agent renders bar /
-  line / area / pie charts alongside the answer.
-- **Real application** — sign-up with email verification + Google Sign-In, per-topic knowledge
-  bases (each = a Qdrant collection), storage quota, dark mode, token streaming, a toggleable
-  reasoning view, and the **names of the tools the agent invoked** shown inline.
+### 1. Reliability — surviving a flaky provider
+Every LLM and embedding call is wrapped in **bounded retry + exponential backoff with jitter +
+per-attempt timeout**, retrying only *transient* failures (429 / 5xx / timeout / connection drops)
+and re-raising the rest. Streaming retries **only before the first token**, so a blip at connect
+time recovers without ever duplicating mid-stream output.
+→ `app/core/resilience.py`, wired in `app/core/llm.py`.
+
+### 2. Safety guardrails — input *and* output
+A fast, dependency-free layer that runs before and after the model:
+- **Prompt-injection / jailbreak defense** — refuses "ignore previous instructions / reveal your
+  system prompt / act as DAN / developer mode" patterns instead of forwarding them.
+- **PII redaction** — emails, phone, credit-card and SSN-like numbers masked before they reach
+  logs, traces or the prompt.
+- **Input limits** — empty / over-length rejection for abuse and cost control.
+- **Not-financial-advice disclaimer** — auto-appended to investment-style answers.
+→ `app/core/guardrails.py`, applied on both the streaming chat and `/ask` paths.
+
+### 3. Observability — logs, metrics, errors
+- **Correlation id** per request, bound to every log line and returned as `X-Request-ID`.
+- **Structured access logs** (JSON in prod) with method, path, status, latency.
+- **Prometheus `/metrics`** — request rate/latency, LLM calls & retries, guardrail blocks,
+  rate-limit hits (plus default process metrics).
+- **Consistent error envelope** — `{"error": {code, message, request_id}}`; never a raw stack trace.
+→ `app/core/middleware.py`, `app/core/metrics.py`, `app/core/errors.py`.
+
+### 4. Health & readiness
+`/health` (liveness) and `/readiness` — the latter actively checks **Postgres, Redis and Qdrant**
+concurrently and returns `503 degraded` if any dependency is unreachable, so an orchestrator only
+sends traffic when the system can actually serve it.
+
+### 5. Rate limiting
+A **Redis fixed-window** limiter keyed per authenticated user on the expensive chat endpoint. It
+**fails open** if Redis is unavailable (availability over enforcement) and emits a metric on every
+block. → `app/core/ratelimit.py`.
+
+### 6. Secure-by-default config & deployment
+- The app **refuses to boot** in `ENVIRONMENT=prod` with a default/weak `JWT_SECRET` or a missing
+  `GOOGLE_API_KEY` (fail-fast validation in `config.py`).
+- A **hardened image** (`backend/Dockerfile.prod`): multi-stage, non-root, container `HEALTHCHECK`,
+  multi-worker uvicorn — and a production `docker-compose.prod.yml` (built images, restart policies).
+- **CI** (`.github/workflows/ci.yml`): ruff lint + format check + pytest-with-coverage on the
+  backend, and tsc + vite build on the frontend, on every push/PR.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    U["🖥️ React UI (Vite + TS)"] -->|"REST · SSE · WebSocket"| API["⚡ FastAPI<br/>(RESTful · SOLID · DI)"]
+    U["🖥️ React UI"] -->|"REST · SSE · WebSocket"| MW["🧱 Request middleware<br/>correlation-id · access log · metrics"]
+    MW --> RL{"⏱️ Rate limit<br/>+ 🛡️ Guardrails"}
+    RL -->|"allowed"| API["⚡ FastAPI (SOLID)"]
+    RL -->|"blocked / refused"| U
 
-    subgraph AGENTS["🤖 LangGraph multi-agent graph"]
-        direction TB
-        SUP(["🧭 Supervisor<br/>triage &amp; route"])
-        RET["📚 Retrieval<br/>(RAG)"]
-        MR["🌐 Market Research"]
-        AN["📊 Analyst"]
-        WR["✍️ Writer<br/>+ citations"]
-        CR["🔎 Critic<br/>grounding check"]
-        SUP --> RET --> AN --> WR --> CR
-        SUP --> MR --> AN
-        CR -.->|"revise ≤2"| AN
-    end
-    API --> SUP
+    API --> SUP["🤖 LangGraph supervisor + agents<br/>Retrieval · Research · Analyst · Writer · Critic"]
+    SUP -->|"retry + timeout"| LLM["🧠 Gemini (chat + embeddings)"]
+    SUP --> QD[("Qdrant")]
+    SUP -->|"MCP client"| MCP["🔌 MCP tools"]
 
-    subgraph DATA["🗄️ Datastores"]
-        QD[("Qdrant<br/>vectors · per-topic")]
-        PG[("Postgres<br/>relational + checkpointer")]
-        RD[("Redis<br/>cache · pubsub · queue")]
-    end
-
-    subgraph EXT["🧰 Tools &amp; services"]
-        MCP["🔌 MCP server :8001<br/>web_search · fetch_url<br/>company_financials · calculator"]
-        CL["☁️ Cloudinary<br/>raw files"]
-        LS["📈 LangSmith<br/>tracing &amp; eval"]
-    end
-
-    RET --> QD
-    MR -->|"MCP client"| MCP
-    API --> PG
-    API --> RD
-    API --> WK["⏳ ARQ worker<br/>async ingestion"]
-    WK --> CL
-    WK --> QD
-    WK -.->|"progress · pubsub"| RD
-    API -.->|"trace"| LS
+    API --> PG[("Postgres")]
+    API --> RD[("Redis")]
+    API -.->|"/metrics"| PROM["📊 Prometheus"]
+    API -.->|"trace"| LS["📈 LangSmith"]
+    HC["❤️ /health · /readiness"] --> PG & RD & QD
 ```
 
-**Request flow.** The UI calls FastAPI over REST; chat answers stream back over **SSE** (tokens,
-thinking, citations, charts, tool names) and ingestion progress over **WebSocket**. FastAPI invokes
-the **LangGraph** graph, whose Supervisor routes to the right agents; the Retrieval agent hits
-**Qdrant**, the Market Research agent calls the **MCP server** as a client. Uploads are handled
-out-of-band by an **ARQ worker** that parses, chunks, embeds and indexes into Qdrant while the user
-keeps chatting.
+Guardrails and rate limiting sit at the edge; reliability wraps the model boundary; observability
+spans the whole request. Full map + verify-steps in [`PRODUCTION.md`](PRODUCTION.md).
 
-Design principles: **SOLID** (thin controllers, business logic in services, data access and tools
-behind `Protocol` interfaces, dependency injection), a **RESTful** versioned API, `ruff` + `pytest`,
-and a clean separation between relational state (Postgres + LangGraph checkpointer) and vectors
-(Qdrant). Full design: [`ARCHITECTURE.md`](ARCHITECTURE.md).
+## Evaluation
 
-## The Multi-Agent System (LangGraph)
+| Dimension | Tooling | Result |
+|-----------|---------|--------|
+| Answer quality vs no-RAG baseline | `evals/run_eval.py` (LangSmith) | expected-recall, citation coverage, LLM-judge groundedness |
+| **Safety (adversarial)** | `evals/run_safety_eval.py` — **offline**, no API | injection block **5/5**, benign false-positive **0/3**, PII redaction **2/2** |
+| Regression gates | `pytest` — **69 tests** | reliability, guardrails, rate-limit, health, error-envelope, prod-config |
 
-Six agents, supervisor-coordinated:
-
-| Agent | Role |
-|-------|------|
-| **Supervisor** | Triage — decide whether the question needs live external web data; route the flow. |
-| **Retrieval** | Hybrid search over the user's documents in Qdrant; returns cited evidence. |
-| **Market Research** | Live web/financial research via the **MCP** `web_search` tool. |
-| **Analyst** | Synthesize evidence; compute ratios, comparisons, trends. |
-| **Writer** | Compose the final answer with inline `[n]` citations. |
-| **Critic** | Verify every claim is grounded and cited; bounce back for a bounded revision loop. |
-
-```
-START → supervisor → retrieval → [market_research if needed] → analyst → writer → critic
-        → analyst (revise, ≤2) | END
-```
-
-State is persisted per conversation thread with LangGraph's **AsyncPostgresSaver**, so threads are
-durable and resumable.
-
-## Retrieval-Augmented Generation
-
-- **Multi-format ingestion**: PDF (PyMuPDF + table extraction via pdfplumber), DOCX, and scanned
-  images (OCR). A parser registry makes new formats additive (Open/Closed).
-- **Advanced chunking**: structure-aware + recursive splitting, **parent–child (small-to-big)**,
-  **Anthropic-style contextual retrieval**, and table-aware handling for financial statements.
-- **Hybrid retrieval**: dense vectors (Gemini `gemini-embedding-2`, 3072-d, cosine) fused with a
-  keyword (full-text) leg via **Reciprocal Rank Fusion**, then small-to-big context expansion.
-- **Citations**: each chunk carries document, page, and source URL; the Writer emits `[n]` markers
-  the Critic validates against the evidence.
-
-## Tools via MCP (≥ 3 tools, MCP communication)
-
-A dedicated **MCP server** (FastMCP, streamable-HTTP) exposes four tools; the Market Research agent
-is an **MCP client** that calls them over the protocol:
-
-- `web_search` — DuckDuckGo web search (no API key)
-- `company_financials` — focused search for a company's latest results
-- `fetch_url` — fetch and clean a web page's text
-- `financial_calculator` — safe arithmetic evaluation (AST-based)
-
-This satisfies both the **≥3 tools** requirement and the optional **MCP communication** enhancement.
-
-## Skills
-
-Reusable, self-contained capabilities any agent or client can invoke (behind a `TextGenerator`
-port): `summarize`, `translate`, `fact_check` — exposed via `GET/POST /api/v1/skills`.
-
-## Evaluation & Baseline Benchmarking
-
-`evals/run_eval.py` benchmarks FinSight against a **no-RAG baseline** on a labeled set of questions
-about the sample report, with **LangSmith** tracing enabled:
-
-- **Expected-answer recall** (RAG vs. baseline) — does RAG recover the ground-truth figures?
-- **Citation coverage** — fraction of answers carrying `[n]` citations.
-- **Groundedness** — an LLM-as-judge score that the answer is supported by the retrieved evidence.
-
-This demonstrates the optional *formal evaluation metrics and baseline benchmarking* enhancement.
-
-## Tech Stack
-
-LangGraph · LangChain · Google Gemini · FastAPI · **Qdrant** · PostgreSQL · Redis · ARQ ·
-Cloudinary · **MCP** · LangSmith · ruff · pytest · Docker Compose.
+The safety eval is a labelled adversarial set (`evals/safety_dataset.py`) and doubles as a CI gate
+(`tests/test_safety_eval.py`), so a future change that weakens the guardrail fails the build.
 
 ## Reproduce
 
@@ -165,51 +112,39 @@ Cloudinary · **MCP** · LangSmith · ruff · pytest · Docker Compose.
 cp .env.example .env          # set GOOGLE_API_KEY (free: aistudio.google.com/apikey)
 docker compose up -d --build  # postgres, qdrant, redis, mcp, api, worker
 docker compose exec api alembic upgrade head
-cd frontend && npm install && npm run dev   # → http://localhost:5173
+
+# verify the hardening
+docker compose exec api pytest -q              # 69 tests
+docker compose exec api python -m evals.run_safety_eval
+curl localhost:8000/api/v1/readiness           # {"status":"ready","dependencies":{...}}
+curl localhost:8000/metrics | grep finsight_   # Prometheus metrics
+
+# production-style run (enforces secure config, non-root image, restart policies)
+docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 ```
 
-A ready-made report ships in the repo at `samples/sample_financial_report.docx`
-(*Nimbus Cloud Inc. FY2024*). Sign up (email verification auto-passes in dev mode), create a topic,
-upload the sample, then try:
+A ready-made report ships at `samples/sample_financial_report.docx` for an end-to-end chat demo
+(see the *Quick demo* section of [`README.md`](README.md)).
 
-| Ask | What to expect |
-|-----|----------------|
-| `What was Q4 2024 revenue and net income?` | Grounded **$1,180M / $262M** with a `[1]` citation |
-| `Plot quarterly revenue for 2024 as a chart` | A line/bar chart (820 → 910 → 1,015 → 1,180) |
-| `Show revenue breakdown by segment as a pie chart` | A pie (Cloud 50% · Data 28% · AI 22%) |
+## Responsible AI
 
-```bash
-# benchmark RAG vs. a no-RAG baseline (LangSmith tracing on)
-docker compose exec api python -m evals.run_eval
-```
-The full reviewer walkthrough lives in the repo `README.md` → *Quick demo (for reviewers)*.
+FinSight is a research aid, **not financial advice**: investment-style answers carry an automatic
+disclaimer, every factual claim is citation-backed, user data is per-user scoped, and PII is redacted
+before logging. Intended use, limitations and risk mitigations are documented in
+[`MODEL_CARD.md`](MODEL_CARD.md).
 
-## Sample Interaction
+## What I Learned
 
-> **Q:** What does NVIDIA do and what is its most recent reported quarterly revenue?
->
-> **A:** NVIDIA is a technology company focused on AI products and data centers [4, 5]. For Q2
-> fiscal 2026, NVIDIA reported revenue of $46.7 billion, +56% year-over-year [3].
->
-> *Sources:* [3] investor.nvidia.com · [2] Wikipedia · [4] TradingView · [5] Yahoo Finance
-
-The Supervisor routed to Market Research (live web needed), which called the MCP `web_search` tool;
-the Writer cited the sources and the Critic approved.
-
-## Limitations & Future Work
-
-- Keyword retrieval currently uses Qdrant full-text matching; a sparse-vector (BM25) leg would
-  strengthen hybrid ranking.
-- A cross-encoder reranker is pluggable but disabled by default to avoid heavy model downloads.
-- Gemini's free tier is rate-limited; throttled replies are surfaced in the UI with a retry hint.
-- The whole stack runs locally via Docker Compose; cloud hosting is left as future work.
-
-## Repository & Quality
-
-- Code: https://github.com/phanminhtai23/finsight-multi-agent
-- `pytest` unit tests, `ruff`-clean, full SOLID layering, runs entirely via Docker Compose.
+- **Productionizing is mostly about the unhappy paths.** The interesting work was failure modes —
+  rate limits, injection, dependency outages — not the happy-path answer.
+- **Guardrails must be testable.** Encoding adversarial cases as a dataset + CI gate turned "we have
+  safety" into a measurable, regression-proof claim.
+- **Observability pays for itself immediately.** A correlation id threaded through structured logs
+  made every other feature easier to build and debug.
+- **Fail fast, fail open — pick per concern.** Config validation should fail *fast* (refuse to boot
+  insecure); the rate limiter should fail *open* (don't take the app down if Redis blips).
 
 ---
 
-**Tags:** `multi-agent` · `langgraph` · `rag` · `mcp` · `agentic-ai` · `financial-analysis` ·
-`qdrant` · `fastapi` · `react` · `llm` · `google-gemini` · `hybrid-search` · `contextual-retrieval` · `aaidc`
+**Tags:** `agentic-ai` · `production` · `mlops` · `llmops` · `multi-agent` · `langgraph` · `rag` ·
+`guardrails` · `observability` · `prometheus` · `reliability` · `ci-cd` · `fastapi` · `aaidc`

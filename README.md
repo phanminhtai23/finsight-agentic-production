@@ -17,7 +17,8 @@
 
 ---
 
-> Submission for **Ready Tensor — Agentic AI Developer Certification (AAIDC), Module 2: Build Your Multi-Agent System**.
+> Submission for **Ready Tensor — Agentic AI Developer Certification (AAIDC), Module 3: Agentic AI in Production**.
+> Project 3 **hardens the multi-agent system from Module 2** with reliability (retries/timeouts), safety guardrails, observability (metrics + correlation ids), health/readiness probes, rate limiting, CI/CD and a hardened deployment — see **[PRODUCTION.md](PRODUCTION.md)** and **[MODEL_CARD.md](MODEL_CARD.md)**.
 
 FinSight is a production-style, multi-agent system that answers financial questions about **any company** — either from documents you upload (PDF, Word, scanned images) or from live web/financial sources — and **always answers with inline citations** back to the exact source page.
 
@@ -68,6 +69,19 @@ cd frontend && npm install && npm run dev   # → http://localhost:5173
 - **Async & concurrent** — long-running ingestion / research runs in background workers; you can keep chatting in the same conversation. Progress streams live over WebSocket.
 - **Durable memory** — conversation state and long-term user memory persisted in **Postgres** via LangGraph's built-in checkpointer/store.
 - **Observability** — full tracing and evaluation with LangSmith.
+
+## 🛡️ Production Hardening (Project 3)
+
+Module 3 takes the system from "works" to "operable". Full details + how to verify each item in **[PRODUCTION.md](PRODUCTION.md)**.
+
+- **Reliability** — every LLM/embedding call wrapped in bounded retry + exponential backoff + timeout; streaming retries only before the first token. ([`resilience.py`](backend/app/core/resilience.py))
+- **Safety guardrails** — prompt-injection defense, PII redaction, input-length limits, and an automatic not-financial-advice disclaimer, on every chat path. ([`guardrails.py`](backend/app/core/guardrails.py))
+- **Observability** — per-request correlation id (`X-Request-ID`), structured access logs, **Prometheus `/metrics`**, and a consistent JSON **error envelope**. ([`metrics.py`](backend/app/core/metrics.py), [`middleware.py`](backend/app/core/middleware.py), [`errors.py`](backend/app/core/errors.py))
+- **Health & readiness** — `/health` (liveness) and `/readiness` (checks Postgres, Redis, Qdrant).
+- **Rate limiting** — Redis fixed-window, per-user, fail-open. ([`ratelimit.py`](backend/app/core/ratelimit.py))
+- **Secure by default** — app refuses to boot in prod with a weak `JWT_SECRET` or missing keys; non-root multi-worker [`Dockerfile.prod`](backend/Dockerfile.prod) + [`docker-compose.prod.yml`](docker-compose.prod.yml).
+- **CI/CD** — [GitHub Actions](.github/workflows/ci.yml): ruff + pytest (coverage) + frontend build on every push/PR.
+- **Evaluation** — answer-quality eval vs baseline (LangSmith) **and** an offline adversarial **safety eval** (injection 5/5, PII 2/2): `python -m evals.run_safety_eval`.
 
 ## 🏗️ Architecture
 
@@ -244,6 +258,7 @@ frontend/            React + Vite + TS
 - [x] M4 — Async tasks (ARQ + Redis pub/sub + WebSocket)  *(ingestion path)*
 - [x] M5 — React frontend (landing, auth, topics + upload, chat streaming, thinking, dark mode)
 - [x] M6 — Skills (`/skills`) + LangSmith evals (RAG vs baseline) + publication
+- [x] **M7 — Production hardening (Project 3):** reliability, guardrails, observability, health/readiness, rate limiting, CI/CD, hardened deploy, safety eval — see [PRODUCTION.md](PRODUCTION.md)
 
 ## 📄 License
 
