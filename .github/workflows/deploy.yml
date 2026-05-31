@@ -1,0 +1,38 @@
+name: Deploy
+
+# Continuous deployment: after CI passes on main, SSH into the droplet, pull the latest
+# code and roll the stack with zero manual steps.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: {}   # allow manual "Run workflow" from the Actions tab
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Only deploy when CI succeeded (or when triggered manually).
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            set -e
+            cd ~/project/finsight-agentic-production
+            git fetch origin
+            git reset --hard origin/main
+            docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+            sleep 10
+            docker compose -f docker-compose.prod.yml exec -T api alembic upgrade head
+            docker image prune -f
+            echo "Deployed $(git rev-parse --short HEAD)"

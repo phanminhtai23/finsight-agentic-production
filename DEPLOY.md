@@ -146,3 +146,28 @@ docker compose -f docker-compose.prod.yml pull && \
 
 - Metrics: `https://api.yourdomain.com/metrics` (consider firewalling this to your IP).
 - Health/readiness: `/api/v1/health`, `/api/v1/readiness`.
+
+## Continuous Deployment (auto-deploy on push to main)
+
+`.github/workflows/deploy.yml` SSHes into the droplet after CI passes and rolls the stack
+(`git reset --hard origin/main` → `docker compose up -d --build` → `alembic upgrade head`).
+
+**One-time setup:**
+
+1. On the droplet, create a dedicated deploy key and authorize it:
+   ```bash
+   ssh-keygen -t ed25519 -f ~/.ssh/gh_deploy -N "" -C "github-actions"
+   cat ~/.ssh/gh_deploy.pub >> ~/.ssh/authorized_keys
+   cat ~/.ssh/gh_deploy        # copy the WHOLE private key (incl. BEGIN/END lines)
+   ```
+2. In GitHub → repo → **Settings → Secrets and variables → Actions → New repository secret**, add:
+   | Secret | Value |
+   |--------|-------|
+   | `SSH_HOST` | droplet IP (e.g. `104.248.150.222`) |
+   | `SSH_USER` | `root` |
+   | `SSH_PORT` | `22` |
+   | `SSH_PRIVATE_KEY` | the full contents of `~/.ssh/gh_deploy` |
+3. Push to `main` → CI runs → on success, **Deploy** runs automatically. You can also trigger it
+   manually from the **Actions** tab (`Run workflow`).
+
+> The droplet `.env` is untracked, so `git reset --hard` never touches your secrets.
