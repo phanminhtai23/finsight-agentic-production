@@ -11,6 +11,7 @@ from __future__ import annotations
 import io
 import os
 import statistics
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Protocol
 
@@ -19,6 +20,10 @@ from app.rag.chunking.models import ElementType, ParsedDocument, ParsedElement
 # Tesseract languages for OCR. Vietnamese first (financial reports are often scanned VN PDFs);
 # install the language data in the image (tesseract-ocr-vie). Falls back to English if missing.
 _OCR_LANG = os.getenv("OCR_LANGUAGES", "vie+eng")
+# Render DPI for scanned pages — lower is faster; 150 is a good speed/accuracy trade-off.
+_OCR_DPI = int(os.getenv("OCR_DPI", "150"))
+# Parallel OCR workers (Tesseract runs as a subprocess and releases the GIL, so threads help).
+_OCR_WORKERS = int(os.getenv("OCR_WORKERS", str(max(2, (os.cpu_count() or 2)))))
 
 
 class ParserError(RuntimeError):
@@ -67,40 +72,51 @@ class PdfParser:
     def parse(self, path: str, *, title: str) -> ParsedDocument:
         import fitz  # PyMuPDF
 
-        elements: list[ParsedElement] = []
+        by_page: dict[int, list[ParsedElement]] = {}
+        scanned: list[tuple[int, bytes]] = []  # (page_no, PNG bytes) for pages with no text layer
         doc = fitz.open(path)
         try:
             for page_no, page in enumerate(doc, start=1):
                 blocks = self._page_blocks(page, page_no)
-                # Scanned page (no embedded text) → render it and OCR.
-                if not blocks:
-                    ocr = self._ocr_page(page, page_no)
-                    if ocr is not None:
-                        blocks = [ocr]
-                elements.extend(blocks)
+                if blocks:
+                    by_page[page_no] = blocks
+                else:
+                    # Render now (fitz isn't thread-safe), OCR later in parallel.
+                    scanned.append((page_no, page.get_pixmap(dpi=_OCR_DPI).tobytes("png")))
             page_count = doc.page_count
         finally:
             doc.close()
 
+        for page_no, element in self._ocr_pages(scanned):
+            by_page.setdefault(page_no, []).append(element)
+
+        elements = [el for page_no in sorted(by_page) for el in by_page[page_no]]
         elements.extend(self._tables(path))
         return ParsedDocument(
             title=title, file_type="pdf", elements=elements, page_count=page_count
         )
 
     @staticmethod
-    def _ocr_page(page, page_no: int) -> ParsedElement | None:  # noqa: ANN001
-        """OCR a page image when it has no extractable text layer (scanned PDF)."""
-        try:
-            from PIL import Image
+    def _ocr_pages(scanned: list[tuple[int, bytes]]) -> list[tuple[int, ParsedElement]]:
+        """OCR pre-rendered scanned pages in parallel (Tesseract releases the GIL)."""
+        if not scanned:
+            return []
 
-            pix = page.get_pixmap(dpi=200)
-            img = Image.open(io.BytesIO(pix.tobytes("png")))
-            text = _ocr_image(img)
-        except Exception:  # noqa: BLE001 - OCR is best-effort per page
-            return None
-        if not text:
-            return None
-        return ParsedElement(text=text, type=ElementType.TEXT, page=page_no)
+        def ocr_one(item: tuple[int, bytes]) -> tuple[int, ParsedElement] | None:
+            page_no, png = item
+            try:
+                from PIL import Image
+
+                text = _ocr_image(Image.open(io.BytesIO(png)))
+            except Exception:  # noqa: BLE001 - OCR is best-effort per page
+                return None
+            if not text:
+                return None
+            return page_no, ParsedElement(text=text, type=ElementType.TEXT, page=page_no)
+
+        workers = max(1, min(_OCR_WORKERS, len(scanned)))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            return [r for r in pool.map(ocr_one, scanned) if r is not None]
 
     @staticmethod
     def _page_blocks(page, page_no: int) -> list[ParsedElement]:  # noqa: ANN001
