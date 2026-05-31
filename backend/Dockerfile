@@ -8,7 +8,7 @@ WORKDIR /app
 
 # System deps for PDF/OCR parsing (PyMuPDF, unstructured) and psycopg.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential libpq-dev poppler-utils tesseract-ocr tesseract-ocr-vie \
+    build-essential libpq-dev poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml ./

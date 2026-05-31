@@ -11,34 +11,31 @@ from __future__ import annotations
 import io
 import os
 import statistics
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Protocol
 
 from app.rag.chunking.models import ElementType, ParsedDocument, ParsedElement
 
-# Tesseract languages for OCR. Vietnamese first (financial reports are often scanned VN PDFs);
-# install the language data in the image (tesseract-ocr-vie). Falls back to English if missing.
-_OCR_LANG = os.getenv("OCR_LANGUAGES", "vie+eng")
-# Render DPI for scanned pages — lower is faster; 150 is a good speed/accuracy trade-off.
-_OCR_DPI = int(os.getenv("OCR_DPI", "150"))
-# Parallel OCR workers (Tesseract runs as a subprocess and releases the GIL, so threads help).
-_OCR_WORKERS = int(os.getenv("OCR_WORKERS", str(max(2, (os.cpu_count() or 2)))))
+# Render DPI for scanned pages handed to Gemini Vision — higher is sharper but heavier.
+_OCR_DPI = int(os.getenv("OCR_DPI", "170"))
+# Concurrent Vision-OCR calls (network-bound, so threads help; bounded for rate limits).
+_OCR_WORKERS = int(os.getenv("OCR_WORKERS", "4"))
+
+# (png_bytes) -> extracted text. Injected so tests can stub it; defaults to Gemini Vision.
+VisionOCR = Callable[[bytes], str]
 
 
 class ParserError(RuntimeError):
     pass
 
 
-def _ocr_image(img) -> str:  # noqa: ANN001
-    """Run Tesseract on a PIL image, falling back to English if the configured language data
-    isn't installed."""
-    import pytesseract
+def _default_vision_ocr(png_bytes: bytes) -> str:
+    # Lazy import keeps the LLM out of the import path for text-only parsing / tests.
+    from app.rag.ingestion.vision_ocr import extract_text_from_image
 
-    try:
-        return pytesseract.image_to_string(img, lang=_OCR_LANG).strip()
-    except pytesseract.TesseractError:
-        return pytesseract.image_to_string(img).strip()  # default language only
+    return extract_text_from_image(png_bytes)
 
 
 class DocumentParser(Protocol):
@@ -69,6 +66,9 @@ def _rows_to_markdown(rows: list[list]) -> str:
 class PdfParser:
     extensions = (".pdf",)
 
+    def __init__(self, vision_ocr: VisionOCR | None = None) -> None:
+        self._vision_ocr = vision_ocr or _default_vision_ocr
+
     def parse(self, path: str, *, title: str) -> ParsedDocument:
         import fitz  # PyMuPDF
 
@@ -96,20 +96,14 @@ class PdfParser:
             title=title, file_type="pdf", elements=elements, page_count=page_count
         )
 
-    @staticmethod
-    def _ocr_pages(scanned: list[tuple[int, bytes]]) -> list[tuple[int, ParsedElement]]:
-        """OCR pre-rendered scanned pages in parallel (Tesseract releases the GIL)."""
+    def _ocr_pages(self, scanned: list[tuple[int, bytes]]) -> list[tuple[int, ParsedElement]]:
+        """Transcribe pre-rendered scanned pages with Gemini Vision, in parallel."""
         if not scanned:
             return []
 
         def ocr_one(item: tuple[int, bytes]) -> tuple[int, ParsedElement] | None:
             page_no, png = item
-            try:
-                from PIL import Image
-
-                text = _ocr_image(Image.open(io.BytesIO(png)))
-            except Exception:  # noqa: BLE001 - OCR is best-effort per page
-                return None
+            text = self._vision_ocr(png)
             if not text:
                 return None
             return page_no, ParsedElement(text=text, type=ElementType.TEXT, page=page_no)
@@ -206,24 +200,34 @@ class DocxParser:
 class ImageParser:
     extensions = (".png", ".jpg", ".jpeg", ".tiff", ".bmp")
 
+    def __init__(self, vision_ocr: VisionOCR | None = None) -> None:
+        self._vision_ocr = vision_ocr or _default_vision_ocr
+
     def parse(self, path: str, *, title: str) -> ParsedDocument:
         try:
             from PIL import Image
-        except ImportError as exc:  # pragma: no cover
-            raise ParserError("OCR dependencies not available") from exc
-        try:
-            text = _ocr_image(Image.open(path))
+
+            buf = io.BytesIO()
+            Image.open(path).convert("RGB").save(buf, format="PNG")
         except Exception as exc:  # noqa: BLE001
-            raise ParserError(
-                "OCR failed — is the Tesseract binary installed and on PATH?"
-            ) from exc
+            raise ParserError("Could not read the image file") from exc
+        text = self._vision_ocr(buf.getvalue())
         elements = [ParsedElement(text=text, type=ElementType.TEXT, page=1)] if text else []
         return ParsedDocument(title=title, file_type="image", elements=elements, page_count=1)
 
 
 class ParserRegistry:
-    def __init__(self, parsers: list[DocumentParser] | None = None) -> None:
-        self._parsers = parsers or [PdfParser(), DocxParser(), ImageParser()]
+    def __init__(
+        self,
+        parsers: list[DocumentParser] | None = None,
+        *,
+        vision_ocr: VisionOCR | None = None,
+    ) -> None:
+        self._parsers = parsers or [
+            PdfParser(vision_ocr),
+            DocxParser(),
+            ImageParser(vision_ocr),
+        ]
 
     def for_extension(self, ext: str) -> DocumentParser:
         ext = ext.lower()
