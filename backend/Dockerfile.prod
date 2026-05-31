@@ -1,0 +1,48 @@
+# Production image — slim, non-root, multi-worker, with a container healthcheck.
+# Build: docker build -f backend/Dockerfile.prod -t finsight-api:prod backend
+FROM python:3.12-slim AS builder
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# Build deps for psycopg / PyMuPDF wheels (kept out of the final image).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml ./
+# Install into an isolated prefix we can copy into the runtime stage (prod deps only — no dev).
+RUN pip install --upgrade pip && pip install --prefix=/install -e .
+
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    ENVIRONMENT=prod \
+    DEBUG=false
+
+WORKDIR /app
+
+# Runtime-only system libs (PDF/OCR + libpq + curl for the healthcheck).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 poppler-utils tesseract-ocr curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /install /usr/local
+COPY . .
+
+# Run as an unprivileged user.
+RUN useradd -m -u 10001 appuser && chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
+    CMD curl -fsS http://localhost:8000/api/v1/health || exit 1
+
+# Multiple workers for concurrency; tune via env if needed.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

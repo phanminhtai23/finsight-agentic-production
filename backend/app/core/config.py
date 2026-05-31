@@ -7,8 +7,10 @@ Centralizing settings here (and injecting them) keeps modules free of direct
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_JWT_SECRET = "change-me-in-prod-please"
 
 
 class Settings(BaseSettings):
@@ -47,7 +49,7 @@ class Settings(BaseSettings):
     mcp_server_url: str = "http://localhost:8001/mcp"
 
     # --- Auth / security ---
-    jwt_secret: str = "change-me-in-prod-please"
+    jwt_secret: str = DEFAULT_JWT_SECRET
     jwt_algorithm: str = "HS256"
     access_token_ttl_minutes: int = 30
     refresh_token_ttl_days: int = 14
@@ -112,6 +114,20 @@ class Settings(BaseSettings):
     @property
     def is_prod(self) -> bool:
         return self.environment == "prod"
+
+    @model_validator(mode="after")
+    def _validate_production_secrets(self) -> "Settings":
+        """Fail fast on insecure/missing config when running in production."""
+        if self.environment != "prod":
+            return self
+        problems: list[str] = []
+        if self.jwt_secret == DEFAULT_JWT_SECRET or len(self.jwt_secret) < 32:
+            problems.append("JWT_SECRET must be a strong secret (>=32 chars), not the default")
+        if not self.google_api_key:
+            problems.append("GOOGLE_API_KEY must be set")
+        if problems:
+            raise ValueError("Insecure production configuration: " + "; ".join(problems))
+        return self
 
 
 @lru_cache
