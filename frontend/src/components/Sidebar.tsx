@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import type { Conversation, Topic } from "../lib/types";
 import { useAuth } from "../context/AuthContext";
@@ -126,6 +127,14 @@ export function Sidebar({
         >
           📁 Manage data (topics)
         </button>
+        {user?.is_admin && (
+          <Link
+            to="/admin"
+            className="block w-full px-4 py-2 text-left text-sm font-medium text-indigo-600 hover:bg-neutral-100 dark:text-indigo-400 dark:hover:bg-neutral-800"
+          >
+            🛡️ Admin dashboard
+          </Link>
+        )}
         <UsageBar refreshKey={dataVersion} />
 
         <div className="flex items-center gap-2 border-t border-neutral-200 p-3 dark:border-neutral-800">

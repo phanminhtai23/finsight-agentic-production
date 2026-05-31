@@ -4,10 +4,47 @@ export interface User {
   full_name?: string | null;
   avatar_url?: string | null;
   is_verified: boolean;
+  is_admin?: boolean;
   auth_provider: string;
   tier: string;
   storage_used_bytes: number;
   created_at: string;
+}
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  full_name?: string | null;
+  avatar_url?: string | null;
+  is_verified: boolean;
+  is_admin: boolean;
+  auth_provider: string;
+  tier: string;
+  storage_used_bytes: number;
+  document_count: number;
+  conversation_count: number;
+  message_count: number;
+  created_at: string;
+}
+
+export interface DayCount {
+  date: string;
+  count: number;
+}
+
+export interface AdminStats {
+  total_users: number;
+  verified_users: number;
+  unverified_users: number;
+  admin_users: number;
+  total_documents: number;
+  total_conversations: number;
+  total_messages: number;
+  total_storage_bytes: number;
+  tier_distribution: Record<string, number>;
+  provider_distribution: Record<string, number>;
+  signups_by_day: DayCount[];
+  messages_by_day: DayCount[];
 }
 
 export interface Topic {
