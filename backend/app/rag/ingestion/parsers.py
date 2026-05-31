@@ -8,15 +8,32 @@ page + bbox) that feed the chunking pipeline.
 
 from __future__ import annotations
 
+import io
+import os
 import statistics
 from pathlib import Path
 from typing import Protocol
 
 from app.rag.chunking.models import ElementType, ParsedDocument, ParsedElement
 
+# Tesseract languages for OCR. Vietnamese first (financial reports are often scanned VN PDFs);
+# install the language data in the image (tesseract-ocr-vie). Falls back to English if missing.
+_OCR_LANG = os.getenv("OCR_LANGUAGES", "vie+eng")
+
 
 class ParserError(RuntimeError):
     pass
+
+
+def _ocr_image(img) -> str:  # noqa: ANN001
+    """Run Tesseract on a PIL image, falling back to English if the configured language data
+    isn't installed."""
+    import pytesseract
+
+    try:
+        return pytesseract.image_to_string(img, lang=_OCR_LANG).strip()
+    except pytesseract.TesseractError:
+        return pytesseract.image_to_string(img).strip()  # default language only
 
 
 class DocumentParser(Protocol):
@@ -54,7 +71,13 @@ class PdfParser:
         doc = fitz.open(path)
         try:
             for page_no, page in enumerate(doc, start=1):
-                elements.extend(self._page_blocks(page, page_no))
+                blocks = self._page_blocks(page, page_no)
+                # Scanned page (no embedded text) → render it and OCR.
+                if not blocks:
+                    ocr = self._ocr_page(page, page_no)
+                    if ocr is not None:
+                        blocks = [ocr]
+                elements.extend(blocks)
             page_count = doc.page_count
         finally:
             doc.close()
@@ -63,6 +86,21 @@ class PdfParser:
         return ParsedDocument(
             title=title, file_type="pdf", elements=elements, page_count=page_count
         )
+
+    @staticmethod
+    def _ocr_page(page, page_no: int) -> ParsedElement | None:  # noqa: ANN001
+        """OCR a page image when it has no extractable text layer (scanned PDF)."""
+        try:
+            from PIL import Image
+
+            pix = page.get_pixmap(dpi=200)
+            img = Image.open(io.BytesIO(pix.tobytes("png")))
+            text = _ocr_image(img)
+        except Exception:  # noqa: BLE001 - OCR is best-effort per page
+            return None
+        if not text:
+            return None
+        return ParsedElement(text=text, type=ElementType.TEXT, page=page_no)
 
     @staticmethod
     def _page_blocks(page, page_no: int) -> list[ParsedElement]:  # noqa: ANN001
@@ -154,17 +192,15 @@ class ImageParser:
 
     def parse(self, path: str, *, title: str) -> ParsedDocument:
         try:
-            import pytesseract
             from PIL import Image
         except ImportError as exc:  # pragma: no cover
             raise ParserError("OCR dependencies not available") from exc
         try:
-            text = pytesseract.image_to_string(Image.open(path))
+            text = _ocr_image(Image.open(path))
         except Exception as exc:  # noqa: BLE001
             raise ParserError(
                 "OCR failed — is the Tesseract binary installed and on PATH?"
             ) from exc
-        text = text.strip()
         elements = [ParsedElement(text=text, type=ElementType.TEXT, page=1)] if text else []
         return ParsedDocument(title=title, file_type="image", elements=elements, page_count=1)
 
