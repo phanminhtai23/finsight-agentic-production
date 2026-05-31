@@ -83,6 +83,17 @@ class Settings(BaseSettings):
     embedding_model: str = "models/gemini-embedding-2"
     embedding_dim: int = 3072
 
+    # --- Reliability (retry/backoff/timeout around LLM & embedding calls) ---
+    llm_max_attempts: int = 4
+    llm_retry_initial_seconds: float = 1.0
+    llm_retry_max_seconds: float = 20.0
+    llm_timeout_seconds: float = 60.0
+
+    # --- Guardrails / safety ---
+    guardrails_enabled: bool = True
+    max_input_chars: int = 8000  # reject prompts longer than this (abuse / cost control)
+    redact_pii_in_logs: bool = True
+
     # --- Observability ---
     langsmith_api_key: str | None = None
     langsmith_project: str = "finsight"
