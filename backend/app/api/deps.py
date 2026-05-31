@@ -25,6 +25,7 @@ from app.core.db import get_session, get_sessionmaker
 from app.core.llm import get_chat_model, get_embedder, get_text_generator
 from app.core.qdrant import get_qdrant_client
 from app.core.queue import get_arq_pool
+from app.core.ratelimit import enforce_rate_limit
 from app.core.security import decode_token
 from app.models.user import User
 from app.rag.indexing.qdrant_store import QdrantVectorStore
@@ -212,6 +213,15 @@ async def get_current_user(
 
 
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
+
+
+async def enforce_user_rate_limit(
+    user: CurrentUserDep, redis_client: RedisDep, settings: SettingsDep
+) -> None:
+    """Per-user rate limit for expensive endpoints. Use via ``dependencies=[Depends(...)]``."""
+    if not settings.rate_limit_enabled:
+        return
+    await enforce_rate_limit(redis_client, f"user:{user.id}", settings.rate_limit_per_minute)
 
 
 # --- Topics ---

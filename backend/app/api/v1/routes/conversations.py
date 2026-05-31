@@ -3,7 +3,7 @@
 import json
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import (
@@ -13,6 +13,7 @@ from app.api.deps import (
     SessionDep,
     StreamingChatServiceDep,
     TopicRepoDep,
+    enforce_user_rate_limit,
 )
 from app.schemas.conversation import (
     ChatRequest,
@@ -86,7 +87,10 @@ async def _resolve_collection(conversation, topic_repo: TopicRepoDep) -> str | N
     return topic.qdrant_collection if topic else None
 
 
-@router.post("/{conversation_id}/messages/stream")
+@router.post(
+    "/{conversation_id}/messages/stream",
+    dependencies=[Depends(enforce_user_rate_limit)],
+)
 async def stream_message(
     conversation_id: uuid.UUID,
     body: ChatRequest,

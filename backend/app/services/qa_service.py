@@ -7,6 +7,8 @@ multi-agent graph (Supervisor/Analyst/Critic/...) builds on the same retriever i
 import uuid
 from dataclasses import dataclass
 
+from app.core.config import get_settings
+from app.core.guardrails import apply_output_disclaimer, check_input, refusal_message
 from app.rag.ports import TextGenerator
 from app.rag.retrieval.citation import Citation, build_citations
 from app.rag.retrieval.hybrid import HybridRetriever
@@ -52,6 +54,14 @@ class QAService:
         document_ids: list[uuid.UUID] | None = None,
         user_id: uuid.UUID | None = None,
     ) -> AnswerResult:
+        # Input guardrail: refuse empty / over-long / injection; use the PII-redacted text.
+        settings = get_settings()
+        if settings.guardrails_enabled:
+            check = check_input(question, max_chars=settings.max_input_chars)
+            if not check.allowed:
+                return AnswerResult(answer=refusal_message(check.reason or ""), citations=[])
+            question = check.sanitized
+
         evidence = await self._retriever.retrieve(
             question, document_ids=document_ids, user_id=user_id
         )
@@ -61,5 +71,7 @@ class QAService:
                 citations=[],
             )
         prompt = _SYSTEM.format(question=question, evidence=_format_evidence(evidence))
-        answer = await self._generator.generate(prompt)
-        return AnswerResult(answer=answer.strip(), citations=build_citations(evidence))
+        answer = (await self._generator.generate(prompt)).strip()
+        if settings.guardrails_enabled:
+            answer = apply_output_disclaimer(answer)
+        return AnswerResult(answer=answer, citations=build_citations(evidence))

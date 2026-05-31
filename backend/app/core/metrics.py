@@ -36,6 +36,10 @@ guardrail_blocks_total = Counter(
     "Requests blocked by input guardrails, by reason.",
     labelnames=("reason",),
 )
+rate_limited_total = Counter(
+    "finsight_rate_limited_total",
+    "Requests rejected by the rate limiter.",
+)
 
 
 def render_metrics() -> tuple[bytes, str]:

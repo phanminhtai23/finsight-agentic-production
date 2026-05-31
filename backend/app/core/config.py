@@ -94,6 +94,10 @@ class Settings(BaseSettings):
     max_input_chars: int = 8000  # reject prompts longer than this (abuse / cost control)
     redact_pii_in_logs: bool = True
 
+    # --- Rate limiting (Redis fixed-window, per authenticated user / client IP) ---
+    rate_limit_enabled: bool = True
+    rate_limit_per_minute: int = 60
+
     # --- Observability ---
     langsmith_api_key: str | None = None
     langsmith_project: str = "finsight"
