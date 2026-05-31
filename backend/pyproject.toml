@@ -7,10 +7,6 @@ license = { text = "MIT" }
 authors = [{ name = "Phan Minh Tai", email = "phanminhtai23@gmail.com" }]
 readme = "README.md"
 keywords = ["agentic-ai", "rag", "langgraph", "multi-agent", "production", "fastapi"]
-
-[project.urls]
-Repository = "https://github.com/phanminhtai23/finsight-production"
-Changelog = "https://github.com/phanminhtai23/finsight-production/blob/main/CHANGELOG.md"
 dependencies = [
     # API
     "fastapi>=0.115",
@@ -67,6 +63,10 @@ dev = [
     "httpx>=0.27",
     "pre-commit>=4.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/phanminhtai23/finsight-agentic-production"
+Changelog = "https://github.com/phanminhtai23/finsight-agentic-production/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["setuptools>=75"]
