@@ -122,9 +122,7 @@ class AdminService:
             raise AdminError("User not found")
 
         # Drop each topic's Qdrant collection, then the topic row (cascades document rows).
-        topics = (
-            await self._session.scalars(select(Topic).where(Topic.user_id == user_id))
-        ).all()
+        topics = (await self._session.scalars(select(Topic).where(Topic.user_id == user_id))).all()
         for topic in topics:
             try:
                 store = QdrantVectorStore(
@@ -134,7 +132,9 @@ class AdminService:
                 )
                 await store.delete_collection()
             except Exception as exc:  # noqa: BLE001 - best effort; keep deleting the rest
-                log.warning("admin_qdrant_delete_failed", collection=topic.qdrant_collection, error=str(exc))
+                log.warning(
+                    "admin_qdrant_delete_failed", collection=topic.qdrant_collection, error=str(exc)
+                )
             await self._session.delete(topic)
 
         # Any topic-less documents, then conversations (messages cascade), then the user.
