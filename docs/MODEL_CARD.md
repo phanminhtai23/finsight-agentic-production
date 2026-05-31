@@ -45,16 +45,16 @@ added during production hardening (Project 3).
 
 | Risk | Mitigation | Where |
 |------|-----------|-------|
-| Prompt injection / jailbreak | Heuristic input guardrail refuses known patterns | [`guardrails.py`](backend/app/core/guardrails.py) |
+| Prompt injection / jailbreak | Heuristic input guardrail refuses known patterns | [`guardrails.py`](../backend/app/core/guardrails.py) |
 | PII leakage into logs/model | Email/phone/card/SSN redaction before logging & prompting | same |
 | Misuse as financial advice | Automatic not-financial-advice disclaimer | same |
 | Ungrounded claims | Citation-required prompting + Critic grounding check | `agents/` |
-| Abuse / cost runaway | Per-user rate limiting + input length cap | [`ratelimit.py`](backend/app/core/ratelimit.py) |
-| Insecure deployment | Fail-fast prod config validation, non-root image | [`config.py`](backend/app/core/config.py), `Dockerfile.prod` |
+| Abuse / cost runaway | Per-user rate limiting + input length cap | [`ratelimit.py`](../backend/app/core/ratelimit.py) |
+| Insecure deployment | Fail-fast prod config validation, non-root image | [`config.py`](../backend/app/core/config.py), `Dockerfile.prod` |
 | Silent failures | Structured logs + correlation ids + Prometheus metrics | `core/` |
 
 **Safety evaluation:** `python -m evals.run_safety_eval` → injection block rate **5/5**, benign
-false-positive rate **0/3**, PII redaction **2/2** (see [`evals/safety_dataset.py`](backend/evals/safety_dataset.py)).
+false-positive rate **0/3**, PII redaction **2/2** (see [`evals/safety_dataset.py`](../backend/evals/safety_dataset.py)).
 
 ## Data handling & privacy
 

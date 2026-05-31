@@ -18,7 +18,7 @@
 ---
 
 > Submission for **Ready Tensor — Agentic AI Developer Certification (AAIDC), Module 3: Agentic AI in Production**.
-> Project 3 **hardens the multi-agent system from Module 2** with reliability (retries/timeouts), safety guardrails, observability (metrics + correlation ids), health/readiness probes, rate limiting, CI/CD and a hardened deployment — see **[PRODUCTION.md](PRODUCTION.md)** and **[MODEL_CARD.md](MODEL_CARD.md)**.
+> Project 3 **hardens the multi-agent system from Module 2** with reliability (retries/timeouts), safety guardrails, observability (metrics + correlation ids), health/readiness probes, rate limiting, CI/CD and a hardened deployment — see **[PRODUCTION.md](docs/PRODUCTION.md)** and **[MODEL_CARD.md](docs/MODEL_CARD.md)**.
 
 FinSight is a production-style, multi-agent system that answers financial questions about **any company** — either from documents you upload (PDF, Word, scanned images) or from live web/financial sources — and **always answers with inline citations** back to the exact source page.
 
@@ -72,7 +72,7 @@ cd frontend && npm install && npm run dev   # → http://localhost:5173
 
 ## 🛡️ Production Hardening (Project 3)
 
-Module 3 takes the system from "works" to "operable". Full details + how to verify each item in **[PRODUCTION.md](PRODUCTION.md)**.
+Module 3 takes the system from "works" to "operable". Full details + how to verify each item in **[PRODUCTION.md](docs/PRODUCTION.md)**.
 
 - **Reliability** — every LLM/embedding call wrapped in bounded retry + exponential backoff + timeout; streaming retries only before the first token. ([`resilience.py`](backend/app/core/resilience.py))
 - **Safety guardrails** — prompt-injection defense, PII redaction, input-length limits, and an automatic not-financial-advice disclaimer, on every chat path. ([`guardrails.py`](backend/app/core/guardrails.py))
@@ -85,7 +85,7 @@ Module 3 takes the system from "works" to "operable". Full details + how to veri
 
 ## 🏗️ Architecture
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design, agent roles, communication flows, RAG pipeline and data model.
+See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, agent roles, communication flows, RAG pipeline and data model.
 
 ```mermaid
 flowchart TD
@@ -148,7 +148,9 @@ flowchart TD
 
 ### Prerequisites
 - **Docker & Docker Compose** (recommended) — runs the whole stack.
-- *(optional, local dev only)* Python 3.11+, Node 20+
+- *(optional, local dev only)* Python 3.11+ (3.12 recommended), Node 20+
+- **Hardware:** ~**4 GB RAM** for the full stack (api + worker + qdrant + postgres + redis + mcp); 2 GB works only with swap and reduced workers. ~2 vCPU recommended.
+- **System packages** (already inside the Docker images; only needed for bare-metal runs): `tesseract-ocr` and `poppler-utils` (PDF/OCR), plus Postgres client libs (`libpq`).
 
 ### 1. Get the API keys
 
@@ -258,8 +260,32 @@ frontend/            React + Vite + TS
 - [x] M4 — Async tasks (ARQ + Redis pub/sub + WebSocket)  *(ingestion path)*
 - [x] M5 — React frontend (landing, auth, topics + upload, chat streaming, thinking, dark mode)
 - [x] M6 — Skills (`/skills`) + LangSmith evals (RAG vs baseline) + publication
-- [x] **M7 — Production hardening (Project 3):** reliability, guardrails, observability, health/readiness, rate limiting, CI/CD, hardened deploy, safety eval — see [PRODUCTION.md](PRODUCTION.md)
+- [x] **M7 — Production hardening (Project 3):** reliability, guardrails, observability, health/readiness, rate limiting, CI/CD, hardened deploy, safety eval — see [PRODUCTION.md](docs/PRODUCTION.md)
+
+## 🤝 Contributing
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) and our
+[Code of Conduct](CODE_OF_CONDUCT.md). Release history is in [CHANGELOG.md](CHANGELOG.md).
+
+## 📚 Citation
+
+If you reference FinSight, please cite:
+
+```bibtex
+@software{finsight2026,
+  author  = {Phan Minh Tai},
+  title   = {FinSight: A Production-Hardened Multi-Agent Financial Research Assistant},
+  year    = {2026},
+  url      = {https://github.com/phanminhtai23/finsight-production},
+  note     = {Ready Tensor AAIDC — Module 3 (Agentic AI in Production)}
+}
+```
+
+## ✉️ Maintainer & contact
+
+Phan Minh Tai — **phanminhtai23@gmail.com** · GitHub [@phanminhtai23](https://github.com/phanminhtai23).
+Found a bug? Open an issue and include the response's `X-Request-ID`.
 
 ## 📄 License
 
-MIT
+Released under the [MIT License](LICENSE) — © 2026 Phan Minh Tai.

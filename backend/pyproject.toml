@@ -1,9 +1,16 @@
 [project]
 name = "finsight"
-version = "0.1.0"
+version = "1.0.0"
 description = "FinSight — Production-Hardened Multi-Agent Financial Research Assistant (Ready Tensor AAIDC Module 3)"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+authors = [{ name = "Phan Minh Tai", email = "phanminhtai23@gmail.com" }]
+readme = "README.md"
+keywords = ["agentic-ai", "rag", "langgraph", "multi-agent", "production", "fastapi"]
+
+[project.urls]
+Repository = "https://github.com/phanminhtai23/finsight-production"
+Changelog = "https://github.com/phanminhtai23/finsight-production/blob/main/CHANGELOG.md"
 dependencies = [
     # API
     "fastapi>=0.115",

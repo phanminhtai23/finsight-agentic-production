@@ -93,7 +93,7 @@ flowchart TD
 ```
 
 Guardrails and rate limiting sit at the edge; reliability wraps the model boundary; observability
-spans the whole request. Full map + verify-steps in [`PRODUCTION.md`](PRODUCTION.md).
+spans the whole request. Full map + verify-steps in [`PRODUCTION.md`](docs/PRODUCTION.md).
 
 ## Evaluation
 
@@ -131,7 +131,7 @@ A ready-made report ships at `samples/sample_financial_report.docx` for an end-t
 FinSight is a research aid, **not financial advice**: investment-style answers carry an automatic
 disclaimer, every factual claim is citation-backed, user data is per-user scoped, and PII is redacted
 before logging. Intended use, limitations and risk mitigations are documented in
-[`MODEL_CARD.md`](MODEL_CARD.md).
+[`MODEL_CARD.md`](docs/MODEL_CARD.md).
 
 ## What I Learned
 
@@ -145,6 +145,10 @@ before logging. Intended use, limitations and risk mitigations are documented in
   insecure); the rate limiter should fail *open* (don't take the app down if Redis blips).
 
 ---
+
+**Repository:** https://github.com/phanminhtai23/finsight-production ·
+**Docs:** [README](README.md) · [PRODUCTION.md](docs/PRODUCTION.md) · [MODEL_CARD.md](docs/MODEL_CARD.md) ·
+**Contact:** Phan Minh Tai — phanminhtai23@gmail.com
 
 **Tags:** `agentic-ai` · `production` · `mlops` · `llmops` · `multi-agent` · `langgraph` · `rag` ·
 `guardrails` · `observability` · `prometheus` · `reliability` · `ci-cd` · `fastapi` · `aaidc`

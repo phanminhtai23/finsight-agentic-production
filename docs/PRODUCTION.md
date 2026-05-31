@@ -19,8 +19,8 @@ wrapper.
 
 | Where | What |
 |-------|------|
-| [`app/core/resilience.py`](backend/app/core/resilience.py) | `call_with_retry()` — per-attempt timeout, retries only *transient* errors, re-raises otherwise; `is_transient_error()` / `is_rate_limit_error()` classifiers |
-| [`app/core/llm.py`](backend/app/core/llm.py) | embeddings, `generate()` and `stream_chat()` wrapped. Streaming retries **only before the first token** so it never duplicates mid-stream output |
+| [`app/core/resilience.py`](../backend/app/core/resilience.py) | `call_with_retry()` — per-attempt timeout, retries only *transient* errors, re-raises otherwise; `is_transient_error()` / `is_rate_limit_error()` classifiers |
+| [`app/core/llm.py`](../backend/app/core/llm.py) | embeddings, `generate()` and `stream_chat()` wrapped. Streaming retries **only before the first token** so it never duplicates mid-stream output |
 | Config | `LLM_MAX_ATTEMPTS`, `LLM_RETRY_INITIAL_SECONDS`, `LLM_RETRY_MAX_SECONDS`, `LLM_TIMEOUT_SECONDS` |
 
 **Verify:** `pytest tests/test_resilience.py` (retry-then-succeed, non-transient not retried, timeout treated as transient, exhaustion re-raises).
@@ -28,7 +28,7 @@ wrapper.
 ## 2. Safety guardrails — input & output
 
 A fast, dependency-free safety layer runs **before** the prompt reaches the LLM and **after** the
-answer is produced. ([`app/core/guardrails.py`](backend/app/core/guardrails.py))
+answer is produced. ([`app/core/guardrails.py`](../backend/app/core/guardrails.py))
 
 - **Input validation** — empty / over-length rejection (`MAX_INPUT_CHARS`, cost & abuse control).
 - **Prompt-injection defense** — heuristics for "ignore previous instructions / reveal your system
@@ -37,8 +37,8 @@ answer is produced. ([`app/core/guardrails.py`](backend/app/core/guardrails.py))
   logs, traces or the model.
 - **Not-financial-advice disclaimer** — appended to investment-style answers.
 
-Wired into both chat paths: [`streaming_chat_service.py`](backend/app/services/streaming_chat_service.py)
-and [`qa_service.py`](backend/app/services/qa_service.py).
+Wired into both chat paths: [`streaming_chat_service.py`](../backend/app/services/streaming_chat_service.py)
+and [`qa_service.py`](../backend/app/services/qa_service.py).
 
 **Verify:** `pytest tests/test_guardrails.py tests/test_safety_eval.py` and
 `python -m evals.run_safety_eval` → injection block rate **5/5**, benign false-positives **0/3**,
@@ -48,10 +48,10 @@ PII redaction **2/2**.
 
 | Concern | Where |
 |---------|-------|
-| **Correlation id** per request, bound to all logs, echoed as `X-Request-ID` | [`app/core/middleware.py`](backend/app/core/middleware.py) |
-| **Structured access logs** (method, path, status, duration) | same middleware, JSON in prod via [`logging.py`](backend/app/core/logging.py) |
-| **Prometheus `/metrics`** — request count/latency, LLM calls/retries, guardrail blocks, rate-limit hits | [`app/core/metrics.py`](backend/app/core/metrics.py) |
-| **Global error envelope** — `{"error": {code, message, request_id}}`, never a raw stack trace | [`app/core/errors.py`](backend/app/core/errors.py) |
+| **Correlation id** per request, bound to all logs, echoed as `X-Request-ID` | [`app/core/middleware.py`](../backend/app/core/middleware.py) |
+| **Structured access logs** (method, path, status, duration) | same middleware, JSON in prod via [`logging.py`](../backend/app/core/logging.py) |
+| **Prometheus `/metrics`** — request count/latency, LLM calls/retries, guardrail blocks, rate-limit hits | [`app/core/metrics.py`](../backend/app/core/metrics.py) |
+| **Global error envelope** — `{"error": {code, message, request_id}}`, never a raw stack trace | [`app/core/errors.py`](../backend/app/core/errors.py) |
 | **Tracing** — LangSmith across the agent graph (`LANGSMITH_TRACING=true`) | existing |
 
 **Verify:** `pytest tests/test_api_errors.py tests/test_health.py` then `curl localhost:8000/metrics`.
@@ -62,25 +62,25 @@ PII redaction **2/2**.
 - `GET /api/v1/readiness` — actively checks **Postgres, Redis, Qdrant** concurrently; returns
   `503 degraded` if any dependency is down so an orchestrator won't route traffic prematurely.
 
-[`app/api/v1/routes/health.py`](backend/app/api/v1/routes/health.py) · **Verify:** `pytest tests/test_health.py`.
+[`app/api/v1/routes/health.py`](../backend/app/api/v1/routes/health.py) · **Verify:** `pytest tests/test_health.py`.
 
 ## 5. Rate limiting
 
 Redis fixed-window limiter, keyed per authenticated user, on the expensive chat endpoint. **Fails
 open** if Redis is unavailable (availability over enforcement). `RATE_LIMIT_PER_MINUTE`,
-`RATE_LIMIT_ENABLED`. ([`app/core/ratelimit.py`](backend/app/core/ratelimit.py))
+`RATE_LIMIT_ENABLED`. ([`app/core/ratelimit.py`](../backend/app/core/ratelimit.py))
 
 **Verify:** `pytest tests/test_ratelimit.py`.
 
 ## 6. Secure-by-default config & deployment
 
 - **Fail-fast prod validation** — the app refuses to boot in `ENVIRONMENT=prod` with a default/weak
-  `JWT_SECRET` or a missing `GOOGLE_API_KEY`. ([`config.py`](backend/app/core/config.py), `pytest tests/test_config.py`)
-- **Hardened image** — [`backend/Dockerfile.prod`](backend/Dockerfile.prod): multi-stage, non-root
+  `JWT_SECRET` or a missing `GOOGLE_API_KEY`. ([`config.py`](../backend/app/core/config.py), `pytest tests/test_config.py`)
+- **Hardened image** — [`backend/Dockerfile.prod`](../backend/Dockerfile.prod): multi-stage, non-root
   user, container `HEALTHCHECK`, multi-worker uvicorn.
-- **Production orchestration** — [`docker-compose.prod.yml`](docker-compose.prod.yml): built images
+- **Production orchestration** — [`docker-compose.prod.yml`](../docker-compose.prod.yml): built images
   (no source mounts), `restart: unless-stopped`, dependency healthchecks.
-- **CI** — [`.github/workflows/ci.yml`](.github/workflows/ci.yml): ruff lint + format check + pytest
+- **CI** — [`.github/workflows/ci.yml`](../.github/workflows/ci.yml): ruff lint + format check + pytest
   (with coverage) on the backend, and tsc + vite build on the frontend, on every push/PR.
 
 ---
