@@ -104,13 +104,29 @@ export interface Usage {
   percent: number;
 }
 
+export type ChartType =
+  | "bar"
+  | "column"
+  | "line"
+  | "area"
+  | "pie"
+  | "donut"
+  | "radar"
+  | "rose"
+  | "scatter"
+  | "funnel"
+  | "dualAxes";
+
 export interface ChartSpec {
-  type: "bar" | "line" | "area" | "pie";
+  type: ChartType;
   title?: string;
+  subtitle?: string;
   x?: string;
-  series?: { key: string; name?: string }[];
+  series?: { key: string; name?: string; type?: "line" | "column" }[];
   nameKey?: string;
   valueKey?: string;
+  stack?: boolean;
+  smooth?: boolean;
   data: Record<string, string | number>[];
 }
 

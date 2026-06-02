@@ -10,7 +10,18 @@ import re
 
 from app.rag.ports import TextGenerator
 
-_ALLOWED = {"bar", "line", "area", "pie"}
+_ALLOWED = {
+    "bar",
+    "column",
+    "line",
+    "area",
+    "pie",
+    "donut",
+    "radar",
+    "rose",
+    "scatter",
+    "funnel",
+}
 
 _TRIGGER = re.compile(
     r"\b(analy|chart|graph|plot|visuali|diagram|show|compare|comparison|trend|breakdown|"
@@ -18,23 +29,33 @@ _TRIGGER = re.compile(
     re.IGNORECASE,
 )
 
-_PROMPT = """You are FinSight's Visualization agent. Turn the data below into chart specs the UI
-will render. Decide if one or more charts genuinely help; if not, output [].
+_PROMPT = """You are FinSight's Visualization agent (powered by the AntV chart library). Turn the
+data below into beautiful, well-chosen chart specs the UI renders. Decide if one or more charts
+genuinely help; if not, output [].
 
-Pick the right chart type (your tools):
-- "line" or "area": a metric changing over time / periods (trend).
-- "bar": comparing categories or periods.
-- "pie": parts of a whole (composition / breakdown).
+Pick the BEST chart type for the data (your toolbox):
+- "line": a metric changing over time / periods (trend). Use 1-3 series to compare trends.
+- "area": a trend where magnitude/accumulation matters; good for stacked composition over time.
+- "column": compare values across categories or periods (vertical bars). Multiple series = grouped.
+- "bar": same as column but horizontal — better for many/long category labels.
+- "pie" / "donut": parts of a whole (composition / breakdown). Prefer "donut" — it's cleaner.
+- "rose": a nightingale/rose chart for cyclical or ranked categorical magnitudes.
+- "radar": compare ONE entity across several metrics, or a few entities across shared metrics.
+- "scatter": relationship between two numeric measures.
+- "funnel": stages that decrease in sequence (e.g. pipeline / conversion).
+
+Prefer variety and the most insightful view; avoid defaulting everything to a plain bar chart.
 
 Output ONLY a JSON array of 1-3 chart objects, each:
 {{
-  "type": "bar"|"line"|"area"|"pie",
-  "title": "short title",
-  // for bar/line/area:
+  "type": "column"|"bar"|"line"|"area"|"pie"|"donut"|"radar"|"rose"|"scatter"|"funnel",
+  "title": "short, specific title",
+  // for column/bar/line/area/radar/scatter:
   "x": "<category/period field name>",
   "series": [{{"key": "revenue", "name": "Revenue"}}],     // 1-3 numeric series
   "data": [{{"<x>": "Q1", "revenue": 1250}}],               // 2-8 rows, numbers only
-  // for pie instead of x/series/data above:
+  "stack": false,                                            // optional: stacked area/column
+  // for pie/donut/rose/funnel instead of x/series:
   "nameKey": "label", "valueKey": "value",
   "data": [{{"label": "Cloud", "value": 60}}]
 }}

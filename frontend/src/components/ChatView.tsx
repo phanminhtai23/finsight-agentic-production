@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api, streamChat } from "../lib/api";
+import { exportAnswerToPdf } from "../lib/pdf";
 import type { ChartSpec, Citation, Message } from "../lib/types";
 import { Chart } from "./Chart";
 import { Logo } from "./Logo";
@@ -161,6 +162,11 @@ export function ChatView({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages, liveAnswer, liveThinking]);
 
+  async function exportAnswer(i: number) {
+    const el = document.getElementById(`answer-${i}`);
+    if (el) await exportAnswerToPdf(el, `finsight-answer-${i + 1}.pdf`);
+  }
+
   async function send(text?: string) {
     const msg = (text ?? input).trim();
     if (!msg || streaming) return;
@@ -263,16 +269,25 @@ export function ChatView({
                 <UserAvatar />
               </div>
             ) : (
-              <div key={i} className="flex gap-3">
+              <div key={i} className="group flex gap-3">
                 <Avatar />
                 <div className="min-w-0 flex-1">
                   {m.thinking && <Thinking text={m.thinking} />}
                   {m.tools?.length ? <ToolChips tools={m.tools} /> : null}
-                  <div className="rounded-2xl rounded-tl-sm bg-neutral-100 px-4 py-3 text-[15px] dark:bg-neutral-800">
-                    <Markdown>{m.content}</Markdown>
-                    {m.citations && <Sources citations={m.citations} />}
+                  <div id={`answer-${i}`} className="bg-white dark:bg-neutral-900">
+                    <div className="rounded-2xl rounded-tl-sm bg-neutral-100 px-4 py-3 text-[15px] dark:bg-neutral-800">
+                      <Markdown>{m.content}</Markdown>
+                      {m.citations && <Sources citations={m.citations} />}
+                    </div>
+                    {m.charts?.map((c, j) => <Chart key={j} spec={c} />)}
                   </div>
-                  {m.charts?.map((c, j) => <Chart key={j} spec={c} />)}
+                  <button
+                    onClick={() => exportAnswer(i)}
+                    title="Export this answer to PDF"
+                    className="mt-1.5 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-neutral-400 opacity-0 transition hover:bg-neutral-100 hover:text-indigo-600 group-hover:opacity-100 dark:hover:bg-neutral-800"
+                  >
+                    ⬇ Export PDF
+                  </button>
                 </div>
               </div>
             ),
