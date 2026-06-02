@@ -184,7 +184,7 @@ export function TopicsManager({
                   ref={fileRef}
                   type="file"
                   hidden
-                  accept=".pdf,.docx,.png,.jpg,.jpeg"
+                  accept=".pdf,.docx,.txt,.md"
                   onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])}
                 />
                 <Button variant="outline" onClick={() => fileRef.current?.click()}>
@@ -254,6 +254,11 @@ export function TopicsManager({
                           {d.status}
                         </span>
                       </div>
+                      {d.status === "failed" && d.error && (
+                        <div className="mt-1 rounded-md bg-red-50 px-2 py-1 text-xs text-red-600 dark:bg-red-500/10 dark:text-red-400">
+                          ⚠️ {d.error}
+                        </div>
+                      )}
                     </div>
                     <button
                       onClick={() => deleteDoc(d.id)}
@@ -274,9 +279,9 @@ export function TopicsManager({
                   space. Each topic gets its own vector collection, so its data stays isolated.
                 </li>
                 <li>
-                  <b className="text-indigo-600">2. Add data</b> — upload PDFs, Word files or
-                  images, or paste a web link. Files are parsed, chunked and indexed automatically
-                  (watch the extract progress bar).
+                  <b className="text-indigo-600">2. Add data</b> — upload PDF, Word (.docx) or
+                  text (.txt) files, or paste a web link. Files are parsed, chunked and indexed
+                  automatically (watch the extract progress bar).
                 </li>
                 <li>
                   <b className="text-indigo-600">3. Ask</b> — start a conversation and pin this
@@ -284,8 +289,9 @@ export function TopicsManager({
                 </li>
               </ol>
               <p className="mt-6 text-xs text-neutral-400">
-                Supported: PDF, DOCX, images (OCR), web links · Storage is shared across your
-                topics and counts toward your quota · Deleting a document frees its space.
+                Supported: PDF, DOCX, TXT and web links (files must contain real, selectable text —
+                scanned/image-only documents aren't supported). Storage is shared across your topics
+                and counts toward your quota · Deleting a document frees its space.
               </p>
               <p className="mt-6 text-sm text-neutral-400">← Select a topic to manage its data.</p>
             </div>
