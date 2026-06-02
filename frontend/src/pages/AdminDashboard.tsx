@@ -1,74 +1,48 @@
+import { Area, Bar, Column, Line, Pie } from "@ant-design/plots";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Legend,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { Card, Spinner } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
 import { api, formatBytes } from "../lib/api";
 import type { AdminStats, AdminUser } from "../lib/types";
 
-const PIE = ["#6366f1", "#22c55e", "#f59e0b", "#ef4444", "#06b6d4", "#a855f7"];
+const PALETTE = ["#6366f1", "#06b6d4", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"];
 
-function StatCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent: string }) {
+function StatCard({
+  emoji,
+  label,
+  value,
+  sub,
+  ring,
+}: {
+  emoji: string;
+  label: string;
+  value: string;
+  sub?: string;
+  ring: string;
+}) {
   return (
-    <div className={`rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900`}>
-      <div className={`mb-2 inline-flex h-9 w-9 items-center justify-center rounded-xl text-lg ${accent}`}>
-        {label.split(" ")[0]}
-      </div>
-      <div className="text-2xl font-semibold tracking-tight">{value}</div>
-      <div className="text-xs text-neutral-500">{label.replace(/^\S+\s/, "")}</div>
+    <div className="relative overflow-hidden rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+      <div className={`absolute -right-6 -top-6 h-20 w-20 rounded-full opacity-20 blur-xl ${ring}`} />
+      <div className="mb-2 text-xl">{emoji}</div>
+      <div className="text-2xl font-semibold tracking-tight tabular-nums">{value}</div>
+      <div className="text-xs text-neutral-500">{label}</div>
       {sub && <div className="mt-1 text-xs text-neutral-400">{sub}</div>}
     </div>
   );
 }
 
-function ChartBox({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <Card className="p-4">
-      <h3 className="mb-3 text-sm font-medium text-neutral-600 dark:text-neutral-300">{title}</h3>
-      <div style={{ width: "100%", height: 240 }}>
-        <ResponsiveContainer>{children as any}</ResponsiveContainer>
-      </div>
-    </Card>
-  );
-}
-
-function Pill({ ok, yes, no }: { ok: boolean; yes: string; no: string }) {
-  return (
-    <span
-      className={`rounded-full px-2 py-0.5 text-xs ${
-        ok
-          ? "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-400"
-          : "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"
-      }`}
-    >
-      {ok ? yes : no}
-    </span>
-  );
-}
-
 export default function AdminDashboard() {
   const { user } = useAuth();
+  const { theme } = useTheme();
+  const chartTheme = theme === "dark" ? "classicDark" : "academy";
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
   async function load() {
     setLoading(true);
@@ -92,7 +66,8 @@ export default function AdminDashboard() {
   }, []);
 
   async function remove(u: AdminUser) {
-    if (!confirm(`Delete ${u.email} and ALL their data (documents, chats)? This cannot be undone.`)) return;
+    if (!confirm(`Delete ${u.email} and ALL their data (documents, chats)? This cannot be undone.`))
+      return;
     setDeleting(u.id);
     try {
       await api.delete(`/admin/users/${u.id}`);
@@ -104,23 +79,69 @@ export default function AdminDashboard() {
     }
   }
 
+  const base = useMemo(
+    () => ({
+      height: 240,
+      autoFit: true,
+      theme: chartTheme,
+      scale: { color: { range: PALETTE } },
+      style: { background: "transparent", viewFill: "transparent" },
+    }),
+    [chartTheme],
+  );
+
+  const growth = useMemo(() => {
+    let total = 0;
+    return (stats?.signups_by_day ?? []).map((d) => ({ date: d.date, total: (total += d.count) }));
+  }, [stats]);
+
   const tierData = useMemo(
-    () => Object.entries(stats?.tier_distribution ?? {}).map(([name, value]) => ({ name, value })),
+    () => Object.entries(stats?.tier_distribution ?? {}).map(([type, value]) => ({ type, value })),
     [stats],
   );
   const providerData = useMemo(
-    () => Object.entries(stats?.provider_distribution ?? {}).map(([name, value]) => ({ name, value })),
+    () =>
+      Object.entries(stats?.provider_distribution ?? {}).map(([type, value]) => ({ type, value })),
     [stats],
   );
   const verifyData = useMemo(
     () =>
       stats
         ? [
-            { name: "Verified", value: stats.verified_users },
-            { name: "Unverified", value: stats.unverified_users },
+            { type: "Verified", value: stats.verified_users },
+            { type: "Unverified", value: stats.unverified_users },
           ]
         : [],
     [stats],
+  );
+  const label = (u: AdminUser) => u.full_name || u.email.split("@")[0];
+  const topRequests = useMemo(
+    () =>
+      [...users]
+        .sort((a, b) => b.message_count - a.message_count)
+        .slice(0, 8)
+        .map((u) => ({ name: label(u), value: u.message_count })),
+    [users],
+  );
+  const topStorage = useMemo(
+    () =>
+      [...users]
+        .filter((u) => u.storage_used_bytes > 0)
+        .sort((a, b) => b.storage_used_bytes - a.storage_used_bytes)
+        .slice(0, 8)
+        .map((u) => ({ name: label(u), value: +(u.storage_used_bytes / 1048576).toFixed(2) })),
+    [users],
+  );
+
+  const filtered = useMemo(
+    () =>
+      users.filter(
+        (u) =>
+          !query ||
+          u.email.toLowerCase().includes(query.toLowerCase()) ||
+          (u.full_name ?? "").toLowerCase().includes(query.toLowerCase()),
+      ),
+    [users, query],
   );
 
   if (loading)
@@ -129,7 +150,6 @@ export default function AdminDashboard() {
         <Spinner className="h-8 w-8" />
       </div>
     );
-
   if (error)
     return (
       <div className="grid h-screen place-items-center gap-3 text-center">
@@ -139,6 +159,16 @@ export default function AdminDashboard() {
         </Link>
       </div>
     );
+
+  const donut = (data: any[]) => ({
+    ...base,
+    data,
+    angleField: "value",
+    colorField: "type",
+    innerRadius: 0.62,
+    label: { text: "value", style: { fontWeight: 600 } },
+    legend: { color: { position: "bottom" } },
+  });
 
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950">
@@ -164,84 +194,72 @@ export default function AdminDashboard() {
       <main className="mx-auto max-w-7xl space-y-6 px-6 py-6">
         {/* Stat cards */}
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
-          <StatCard label="👥 Users" value={String(stats?.total_users ?? 0)} accent="bg-indigo-100 dark:bg-indigo-500/15" sub={`${stats?.admin_users ?? 0} admin`} />
-          <StatCard label="✅ Verified" value={String(stats?.verified_users ?? 0)} accent="bg-green-100 dark:bg-green-500/15" sub={`${stats?.unverified_users ?? 0} pending`} />
-          <StatCard label="📄 Documents" value={String(stats?.total_documents ?? 0)} accent="bg-amber-100 dark:bg-amber-500/15" />
-          <StatCard label="💬 Requests" value={String(stats?.total_messages ?? 0)} accent="bg-cyan-100 dark:bg-cyan-500/15" sub={`${stats?.total_conversations ?? 0} chats`} />
-          <StatCard label="💾 Storage" value={formatBytes(stats?.total_storage_bytes ?? 0)} accent="bg-purple-100 dark:bg-purple-500/15" />
-          <StatCard label="🗂️ Topics/chats" value={String(stats?.total_conversations ?? 0)} accent="bg-rose-100 dark:bg-rose-500/15" />
+          <StatCard emoji="👥" label="Total users" value={String(stats?.total_users ?? 0)} sub={`${stats?.admin_users ?? 0} admin`} ring="bg-indigo-400" />
+          <StatCard emoji="✅" label="Verified" value={String(stats?.verified_users ?? 0)} sub={`${stats?.unverified_users ?? 0} pending`} ring="bg-green-400" />
+          <StatCard emoji="📄" label="Documents" value={String(stats?.total_documents ?? 0)} ring="bg-amber-400" />
+          <StatCard emoji="💬" label="Requests" value={String(stats?.total_messages ?? 0)} sub={`${stats?.total_conversations ?? 0} chats`} ring="bg-cyan-400" />
+          <StatCard emoji="💾" label="Storage used" value={formatBytes(stats?.total_storage_bytes ?? 0)} ring="bg-purple-400" />
+          <StatCard emoji="⚡" label="Avg req/user" value={stats && stats.total_users ? (stats.total_messages / stats.total_users).toFixed(1) : "0"} ring="bg-rose-400" />
         </div>
 
-        {/* Time series */}
+        {/* Growth + activity */}
         <div className="grid gap-4 lg:grid-cols-2">
-          <ChartBox title="New signups (by day)">
-            <AreaChart data={stats?.signups_by_day ?? []}>
-              <defs>
-                <linearGradient id="su" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.5} />
-                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#88888822" />
-              <XAxis dataKey="date" fontSize={11} tickLine={false} />
-              <YAxis allowDecimals={false} fontSize={11} width={28} />
-              <Tooltip />
-              <Area type="monotone" dataKey="count" stroke="#6366f1" fill="url(#su)" />
-            </AreaChart>
-          </ChartBox>
-          <ChartBox title="Requests / messages (by day)">
-            <LineChart data={stats?.messages_by_day ?? []}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#88888822" />
-              <XAxis dataKey="date" fontSize={11} tickLine={false} />
-              <YAxis allowDecimals={false} fontSize={11} width={28} />
-              <Tooltip />
-              <Line type="monotone" dataKey="count" stroke="#06b6d4" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ChartBox>
+          <Card className="p-4">
+            <h3 className="mb-3 text-sm font-medium text-neutral-600 dark:text-neutral-300">📈 Cumulative user growth</h3>
+            <Area {...base} data={growth} xField="date" yField="total" shapeField="smooth" style={{ fillOpacity: 0.35, lineWidth: 2 }} axis={{ y: { title: false }, x: { title: false } }} />
+          </Card>
+          <Card className="p-4">
+            <h3 className="mb-3 text-sm font-medium text-neutral-600 dark:text-neutral-300">💬 Requests per day</h3>
+            <Line {...base} data={stats?.messages_by_day ?? []} xField="date" yField="count" shapeField="smooth" style={{ lineWidth: 2.5 }} point={{ sizeField: 3 }} axis={{ y: { title: false }, x: { title: false } }} />
+          </Card>
         </div>
 
         {/* Distributions */}
         <div className="grid gap-4 md:grid-cols-3">
-          <ChartBox title="Users by tier">
-            <PieChart>
-              <Pie data={tierData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75} paddingAngle={3}>
-                {tierData.map((_, i) => (
-                  <Cell key={i} fill={PIE[i % PIE.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend />
-            </PieChart>
-          </ChartBox>
-          <ChartBox title="Email verification">
-            <PieChart>
-              <Pie data={verifyData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75} paddingAngle={3}>
-                <Cell fill="#22c55e" />
-                <Cell fill="#f59e0b" />
-              </Pie>
-              <Tooltip />
-              <Legend />
-            </PieChart>
-          </ChartBox>
-          <ChartBox title="Auth provider">
-            <BarChart data={providerData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#88888822" />
-              <XAxis dataKey="name" fontSize={11} tickLine={false} />
-              <YAxis allowDecimals={false} fontSize={11} width={28} />
-              <Tooltip />
-              <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-                {providerData.map((_, i) => (
-                  <Cell key={i} fill={PIE[i % PIE.length]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ChartBox>
+          <Card className="p-4">
+            <h3 className="mb-3 text-sm font-medium text-neutral-600 dark:text-neutral-300">🏷️ Users by tier</h3>
+            <Pie {...donut(tierData)} />
+          </Card>
+          <Card className="p-4">
+            <h3 className="mb-3 text-sm font-medium text-neutral-600 dark:text-neutral-300">✉️ Email verification</h3>
+            <Pie {...donut(verifyData)} scale={{ color: { range: ["#10b981", "#f59e0b"] } }} />
+          </Card>
+          <Card className="p-4">
+            <h3 className="mb-3 text-sm font-medium text-neutral-600 dark:text-neutral-300">🔐 Auth provider</h3>
+            <Column {...base} data={providerData} xField="type" yField="value" colorField="type" legend={false} style={{ radiusTopLeft: 6, radiusTopRight: 6 }} axis={{ y: { title: false }, x: { title: false } }} />
+          </Card>
+        </div>
+
+        {/* Leaderboards */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card className="p-4">
+            <h3 className="mb-3 text-sm font-medium text-neutral-600 dark:text-neutral-300">🏆 Most active users (requests)</h3>
+            {topRequests.length ? (
+              <Bar {...base} data={topRequests} xField="name" yField="value" colorField="name" legend={false} style={{ radiusTopRight: 6, radiusBottomRight: 6 }} axis={{ y: { title: false }, x: { title: false } }} />
+            ) : (
+              <p className="py-10 text-center text-sm text-neutral-400">No activity yet.</p>
+            )}
+          </Card>
+          <Card className="p-4">
+            <h3 className="mb-3 text-sm font-medium text-neutral-600 dark:text-neutral-300">💾 Top storage users (MB)</h3>
+            {topStorage.length ? (
+              <Bar {...base} data={topStorage} xField="name" yField="value" colorField="name" legend={false} style={{ radiusTopRight: 6, radiusBottomRight: 6 }} axis={{ y: { title: false }, x: { title: false } }} />
+            ) : (
+              <p className="py-10 text-center text-sm text-neutral-400">No storage used yet.</p>
+            )}
+          </Card>
         </div>
 
         {/* Users table */}
-        <Card className="p-0 overflow-hidden">
-          <div className="border-b border-neutral-200 px-5 py-3 text-sm font-medium dark:border-neutral-800">
-            All users ({users.length})
+        <Card className="overflow-hidden p-0">
+          <div className="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-3 dark:border-neutral-800">
+            <span className="text-sm font-medium">Users ({filtered.length})</span>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search email or name…"
+              className="w-64 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-indigo-500 dark:border-neutral-700 dark:bg-neutral-900"
+            />
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -250,15 +268,15 @@ export default function AdminDashboard() {
                   <th className="px-5 py-2 font-medium">User</th>
                   <th className="px-3 py-2 font-medium">Tier</th>
                   <th className="px-3 py-2 font-medium">Status</th>
-                  <th className="px-3 py-2 font-medium text-right">Storage</th>
-                  <th className="px-3 py-2 font-medium text-right">Docs</th>
-                  <th className="px-3 py-2 font-medium text-right">Requests</th>
+                  <th className="px-3 py-2 text-right font-medium">Storage</th>
+                  <th className="px-3 py-2 text-right font-medium">Docs</th>
+                  <th className="px-3 py-2 text-right font-medium">Requests</th>
                   <th className="px-3 py-2 font-medium">Joined</th>
                   <th className="px-3 py-2 font-medium"></th>
                 </tr>
               </thead>
               <tbody>
-                {users.map((u) => (
+                {filtered.map((u) => (
                   <tr key={u.id} className="border-t border-neutral-100 dark:border-neutral-800/70">
                     <td className="px-5 py-2.5">
                       <div className="flex items-center gap-2">
@@ -282,7 +300,15 @@ export default function AdminDashboard() {
                     </td>
                     <td className="px-3 py-2.5 capitalize">{u.tier}</td>
                     <td className="px-3 py-2.5">
-                      <Pill ok={u.is_verified} yes="Verified" no="Pending" />
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs ${
+                          u.is_verified
+                            ? "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-400"
+                            : "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"
+                        }`}
+                      >
+                        {u.is_verified ? "Verified" : "Pending"}
+                      </span>
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{formatBytes(u.storage_used_bytes)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{u.document_count}</td>
