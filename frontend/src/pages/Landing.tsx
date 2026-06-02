@@ -1,8 +1,40 @@
 import { Link } from "react-router-dom";
+import { Chart } from "../components/Chart";
 import { Button } from "../components/ui";
 import { Logo } from "../components/Logo";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { useAuth } from "../context/AuthContext";
+import type { ChartSpec } from "../lib/types";
+
+const DEMO_CHART: ChartSpec = {
+  type: "column",
+  title: "ACME 2024 — Revenue vs Net income ($M)",
+  x: "quarter",
+  series: [
+    { key: "revenue", name: "Revenue" },
+    { key: "net_income", name: "Net income" },
+  ],
+  data: [
+    { quarter: "Q1", revenue: 980, net_income: 120 },
+    { quarter: "Q2", revenue: 1080, net_income: 150 },
+    { quarter: "Q3", revenue: 1250, net_income: 180 },
+    { quarter: "Q4", revenue: 1410, net_income: 210 },
+  ],
+};
+
+const DEMO_TREND: ChartSpec = {
+  type: "area",
+  title: "Gross margin trend (%)",
+  x: "quarter",
+  smooth: true,
+  series: [{ key: "margin", name: "Gross margin" }],
+  data: [
+    { quarter: "Q1", margin: 28 },
+    { quarter: "Q2", margin: 30 },
+    { quarter: "Q3", margin: 32 },
+    { quarter: "Q4", margin: 34 },
+  ],
+};
 
 function Icon({ path }: { path: string }) {
   return (
@@ -161,6 +193,47 @@ export default function Landing() {
                 {s}
               </span>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Live demo — question → grounded answer + beautiful charts */}
+      <section className="border-y border-neutral-200 bg-neutral-50/60 dark:border-neutral-800 dark:bg-neutral-900/40">
+        <div className="mx-auto max-w-6xl px-6 py-20">
+          <h2 className="text-center text-3xl font-semibold tracking-tight">See it in action</h2>
+          <p className="mx-auto mt-3 max-w-xl text-center text-neutral-500">
+            Ask in plain language — FinSight answers with grounded citations and renders
+            beautiful, on-the-fly charts (powered by AntV).
+          </p>
+
+          <div className="mt-12 grid items-start gap-6 lg:grid-cols-5">
+            {/* Conversation */}
+            <div className="lg:col-span-2 space-y-3">
+              <div className="flex justify-end">
+                <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-indigo-600 px-4 py-2.5 text-sm text-white shadow-sm">
+                  Compare ACME's quarterly revenue and net income for 2024, and show the gross-margin
+                  trend.
+                </div>
+              </div>
+              <div className="rounded-2xl rounded-tl-sm bg-white px-4 py-3 text-sm shadow-sm dark:bg-neutral-900">
+                Revenue climbed every quarter, from <b>$980M</b> in Q1 to <b>$1,410M</b> in Q4{" "}
+                <sup className="text-indigo-500">[1]</sup>, while net income roughly doubled to{" "}
+                <b>$210M</b> <sup className="text-indigo-500">[1]</sup>. Gross margin expanded from{" "}
+                <b>28%</b> to <b>34%</b> over the year — a healthy operating-leverage signal.
+                <div className="mt-2 border-t border-neutral-200 pt-2 text-xs text-neutral-400 dark:border-neutral-700">
+                  Sources: [1] ACME_FY2024.pdf · p.4
+                </div>
+                <div className="mt-2 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-neutral-400">
+                  ⬇ Export PDF
+                </div>
+              </div>
+            </div>
+
+            {/* Charts */}
+            <div className="grid gap-4 lg:col-span-3 sm:grid-cols-2">
+              <Chart spec={DEMO_CHART} />
+              <Chart spec={DEMO_TREND} />
+            </div>
           </div>
         </div>
       </section>
