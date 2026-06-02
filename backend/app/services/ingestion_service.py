@@ -94,6 +94,13 @@ class IngestionService:
         document = await self._documents.get(document_id)
         await on_progress(10, "Parsing document")
         parsed = await asyncio.to_thread(self._parsers.parse, local_path, title=title)
+        # No text layer (e.g. a scanned/image-only PDF) → fail with a clear, user-facing warning
+        # instead of indexing an empty document.
+        if not any((el.text or "").strip() for el in parsed.elements):
+            raise ValueError(
+                "No readable text found in this file. It looks like a scanned/image document — "
+                "please upload a PDF, Word (.docx) or text file that contains real (selectable) text."
+            )
         return await self._index_parsed(
             document_id,
             parsed,

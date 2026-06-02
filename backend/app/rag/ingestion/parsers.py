@@ -1,41 +1,26 @@
-"""Document parsers: PDF, DOCX, and scanned images (OCR).
+"""Document parsers: PDF, DOCX, and plain text.
 
 Each parser implements the ``DocumentParser`` protocol and is chosen by file extension via
 ``ParserRegistry`` — adding a new format means adding a parser, not editing existing code
 (Open/Closed principle). Parsing produces located ``ParsedElement``s (text/heading/table with
 page + bbox) that feed the chunking pipeline.
+
+Note: only files with a real text layer are supported (PDF / DOCX / TXT) plus web links. Scanned
+/ image-only documents have no extractable text and are rejected with a clear warning rather than
+silently producing an empty index.
 """
 
 from __future__ import annotations
 
-import io
-import os
 import statistics
-from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Protocol
 
 from app.rag.chunking.models import ElementType, ParsedDocument, ParsedElement
 
-# Render DPI for scanned pages handed to Gemini Vision — higher is sharper but heavier.
-_OCR_DPI = int(os.getenv("OCR_DPI", "170"))
-# Concurrent Vision-OCR calls (network-bound, so threads help; bounded for rate limits).
-_OCR_WORKERS = int(os.getenv("OCR_WORKERS", "4"))
-
-# (png_bytes) -> extracted text. Injected so tests can stub it; defaults to Gemini Vision.
-VisionOCR = Callable[[bytes], str]
-
 
 class ParserError(RuntimeError):
     pass
-
-
-def _default_vision_ocr(png_bytes: bytes) -> str:
-    # Lazy import keeps the LLM out of the import path for text-only parsing / tests.
-    from app.rag.ingestion.vision_ocr import extract_text_from_image
-
-    return extract_text_from_image(png_bytes)
 
 
 class DocumentParser(Protocol):
@@ -66,51 +51,22 @@ def _rows_to_markdown(rows: list[list]) -> str:
 class PdfParser:
     extensions = (".pdf",)
 
-    def __init__(self, vision_ocr: VisionOCR | None = None) -> None:
-        self._vision_ocr = vision_ocr or _default_vision_ocr
-
     def parse(self, path: str, *, title: str) -> ParsedDocument:
         import fitz  # PyMuPDF
 
-        by_page: dict[int, list[ParsedElement]] = {}
-        scanned: list[tuple[int, bytes]] = []  # (page_no, PNG bytes) for pages with no text layer
+        elements: list[ParsedElement] = []
         doc = fitz.open(path)
         try:
             for page_no, page in enumerate(doc, start=1):
-                blocks = self._page_blocks(page, page_no)
-                if blocks:
-                    by_page[page_no] = blocks
-                else:
-                    # Render now (fitz isn't thread-safe), OCR later in parallel.
-                    scanned.append((page_no, page.get_pixmap(dpi=_OCR_DPI).tobytes("png")))
+                elements.extend(self._page_blocks(page, page_no))
             page_count = doc.page_count
         finally:
             doc.close()
 
-        for page_no, element in self._ocr_pages(scanned):
-            by_page.setdefault(page_no, []).append(element)
-
-        elements = [el for page_no in sorted(by_page) for el in by_page[page_no]]
         elements.extend(self._tables(path))
         return ParsedDocument(
             title=title, file_type="pdf", elements=elements, page_count=page_count
         )
-
-    def _ocr_pages(self, scanned: list[tuple[int, bytes]]) -> list[tuple[int, ParsedElement]]:
-        """Transcribe pre-rendered scanned pages with Gemini Vision, in parallel."""
-        if not scanned:
-            return []
-
-        def ocr_one(item: tuple[int, bytes]) -> tuple[int, ParsedElement] | None:
-            page_no, png = item
-            text = self._vision_ocr(png)
-            if not text:
-                return None
-            return page_no, ParsedElement(text=text, type=ElementType.TEXT, page=page_no)
-
-        workers = max(1, min(_OCR_WORKERS, len(scanned)))
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            return [r for r in pool.map(ocr_one, scanned) if r is not None]
 
     @staticmethod
     def _page_blocks(page, page_no: int) -> list[ParsedElement]:  # noqa: ANN001
@@ -197,44 +153,31 @@ class DocxParser:
         return ParsedDocument(title=title, file_type="docx", elements=elements)
 
 
-class ImageParser:
-    extensions = (".png", ".jpg", ".jpeg", ".tiff", ".bmp")
-
-    def __init__(self, vision_ocr: VisionOCR | None = None) -> None:
-        self._vision_ocr = vision_ocr or _default_vision_ocr
+class TextParser:
+    extensions = (".txt", ".md")
 
     def parse(self, path: str, *, title: str) -> ParsedDocument:
-        try:
-            from PIL import Image
-
-            buf = io.BytesIO()
-            Image.open(path).convert("RGB").save(buf, format="PNG")
-        except Exception as exc:  # noqa: BLE001
-            raise ParserError("Could not read the image file") from exc
-        text = self._vision_ocr(buf.getvalue())
-        elements = [ParsedElement(text=text, type=ElementType.TEXT, page=1)] if text else []
-        return ParsedDocument(title=title, file_type="image", elements=elements, page_count=1)
+        raw = Path(path).read_text(encoding="utf-8", errors="replace")
+        elements = [
+            ParsedElement(text=para.strip(), type=ElementType.TEXT, page=None)
+            for para in raw.split("\n\n")
+            if para.strip()
+        ]
+        return ParsedDocument(title=title, file_type="txt", elements=elements)
 
 
 class ParserRegistry:
-    def __init__(
-        self,
-        parsers: list[DocumentParser] | None = None,
-        *,
-        vision_ocr: VisionOCR | None = None,
-    ) -> None:
-        self._parsers = parsers or [
-            PdfParser(vision_ocr),
-            DocxParser(),
-            ImageParser(vision_ocr),
-        ]
+    def __init__(self, parsers: list[DocumentParser] | None = None) -> None:
+        self._parsers = parsers or [PdfParser(), DocxParser(), TextParser()]
 
     def for_extension(self, ext: str) -> DocumentParser:
         ext = ext.lower()
         for parser in self._parsers:
             if ext in parser.extensions:
                 return parser
-        raise ParserError(f"Unsupported file type: {ext}")
+        raise ParserError(
+            f"Unsupported file type: {ext}. Supported: PDF, Word (.docx), text (.txt) and web links."
+        )
 
     def parse(self, path: str, *, title: str | None = None) -> ParsedDocument:
         ext = Path(path).suffix
