@@ -139,7 +139,7 @@ The React + Vite + TypeScript frontend is live at **https://finsightagent.tech**
 
 | Feature | Description |
 |---------|-------------|
-| **Conversation sidebar** | Create and switch between independent conversations; each has its own LangGraph thread and persisted memory. |
+| **Conversation sidebar** | Create, switch between, and delete independent conversations; each has its own LangGraph thread and persisted memory. |
 | **Topic pinning** | Pin one or more uploaded document topics to a conversation so the RAG layer scopes retrieval to the right files. |
 | **Streaming chat** | Tokens stream in real time over SSE/WebSocket; a thinking toggle surfaces the agent's step-by-step reasoning before the final answer. |
 | **Citations** | Every factual claim renders as an inline `[n]` link that deep-links to the exact page in the source document (Cloudinary-hosted). |
@@ -170,10 +170,11 @@ Authorization: Bearer <token>
 | `GET`  | `/metrics` | Prometheus metrics endpoint — request rate/latency, LLM calls, guardrail blocks, rate-limit hits. |
 | `POST` | `/api/v1/auth/register` | Register a new user `{"email", "password"}`. |
 | `POST` | `/api/v1/auth/login` | Obtain a JWT token `{"email", "password"}` → `{"access_token", "token_type"}`. |
-| `GET`  | `/api/v1/conversations` | List the authenticated user's conversations. |
-| `POST` | `/api/v1/conversations` | Create a conversation `{"title"}`. |
-| `GET`  | `/api/v1/conversations/{id}/messages` | List messages for a conversation. |
-| `POST` | `/api/v1/conversations/{id}/messages` | Send a message (streaming SSE) `{"content", "topic_ids"}`. |
+| `GET`    | `/api/v1/conversations` | List the authenticated user's conversations. |
+| `POST`   | `/api/v1/conversations` | Create a conversation `{"title"}`. |
+| `DELETE` | `/api/v1/conversations/{id}` | Delete a conversation and all its messages. Returns 204. |
+| `GET`    | `/api/v1/conversations/{id}/messages` | List messages for a conversation. |
+| `POST`   | `/api/v1/conversations/{id}/messages` | Send a message (streaming SSE) `{"content", "topic_ids"}`. |
 | `GET`  | `/api/v1/topics` | List the user's document topics. |
 | `POST` | `/api/v1/topics` | Create a topic `{"name"}`. |
 | `POST` | `/api/v1/topics/{id}/documents` | Upload a document (multipart/form-data); triggers async ingestion. |

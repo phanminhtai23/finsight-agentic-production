@@ -228,14 +228,17 @@ uvicorn app.main:app --reload
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET  | `/api/v1/health` | Liveness/readiness probe |
-| POST | `/api/v1/conversations` | Create a conversation |
-| POST | `/api/v1/conversations/{id}/messages` | Send a message (chat) |
-| POST | `/api/v1/documents` | Upload a document → triggers async ingestion |
-| GET  | `/api/v1/documents/{id}` | Ingestion status |
-| POST | `/api/v1/conversations/{id}/tasks` | Launch a long-running task |
-| GET  | `/api/v1/tasks/{id}` | Task status / result |
-| WS   | `/api/v1/ws/conversations/{id}` | Stream tokens & task progress |
+| GET    | `/api/v1/health` | Liveness/readiness probe |
+| POST   | `/api/v1/conversations` | Create a conversation |
+| GET    | `/api/v1/conversations` | List the current user's conversations |
+| DELETE | `/api/v1/conversations/{id}` | Delete a conversation and all its messages |
+| POST   | `/api/v1/conversations/{id}/messages` | Send a message (chat) |
+| GET    | `/api/v1/conversations/{id}/messages` | List messages in a conversation |
+| POST   | `/api/v1/documents` | Upload a document → triggers async ingestion |
+| GET    | `/api/v1/documents/{id}` | Ingestion status |
+| POST   | `/api/v1/conversations/{id}/tasks` | Launch a long-running task |
+| GET    | `/api/v1/tasks/{id}` | Task status / result |
+| WS     | `/api/v1/ws/conversations/{id}` | Stream tokens & task progress |
 
 ## 🧪 Quality
 
