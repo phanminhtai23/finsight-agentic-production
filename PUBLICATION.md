@@ -68,6 +68,13 @@ A **Redis fixed-window** limiter keyed per authenticated user on the expensive c
 **fails open** if Redis is unavailable (availability over enforcement) and emits a metric on every
 block. → `app/core/ratelimit.py`.
 
+### 7. Complete data lifecycle — no storage leaks
+Deleting a topic or document now removes **all three copies** of the data atomically: vectors from
+Qdrant, relational rows from Postgres, and the raw file from Cloudinary (or local disk when
+Cloudinary is not configured). The `cloudinary_public_id` stored on every `Document` row drives the
+deletion; if it is absent (local-disk fallback), the cloud step is skipped safely.
+→ `app/rag/ingestion/storage.py` (`FileStorage.delete`), wired in `app/services/topic_service.py`.
+
 ### 6. Secure-by-default config & deployment
 - The app **refuses to boot** in `ENVIRONMENT=prod` with a default/weak `JWT_SECRET` or a missing
   `GOOGLE_API_KEY` (fail-fast validation in `config.py`).

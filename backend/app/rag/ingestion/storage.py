@@ -19,6 +19,10 @@ class FileStorage(Protocol):
         """Store the file and return ``(public_id, url)``."""
         ...
 
+    async def delete(self, public_id: str) -> None:
+        """Permanently remove a previously uploaded file by its public_id."""
+        ...
+
 
 class CloudinaryStorage:
     def __init__(self, settings: Settings) -> None:
@@ -48,6 +52,11 @@ class CloudinaryStorage:
         result = await asyncio.to_thread(_do)
         return result.get("public_id"), result["secure_url"]
 
+    async def delete(self, public_id: str) -> None:
+        import cloudinary.uploader
+
+        await asyncio.to_thread(cloudinary.uploader.destroy, public_id, resource_type="auto")
+
 
 class LocalStorage:
     """Copies files under a local directory; returns a ``file://`` URL."""
@@ -61,6 +70,11 @@ class LocalStorage:
         dest = self.base / (public_id or src.name)
         await asyncio.to_thread(shutil.copy, src, dest)
         return None, dest.resolve().as_uri()
+
+    async def delete(self, public_id: str) -> None:
+        # Local storage returns None as public_id; callers guard against this.
+        dest = self.base / public_id
+        await asyncio.to_thread(lambda: dest.unlink(missing_ok=True))
 
 
 def get_file_storage(settings: Settings | None = None) -> FileStorage:

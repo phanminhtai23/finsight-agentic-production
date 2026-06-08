@@ -96,6 +96,7 @@ Module 3 takes the system from "works" to "operable". Full details + how to veri
 - **Secure by default** — app refuses to boot in prod with a weak `JWT_SECRET` or missing keys; non-root multi-worker [`Dockerfile.prod`](backend/Dockerfile.prod) + [`docker-compose.prod.yml`](docker-compose.prod.yml).
 - **CI/CD** — [GitHub Actions](.github/workflows/ci.yml) **auto-tests backend + frontend on every push** (ruff + pytest/coverage; tsc + Vite build) and [auto-deploys](.github/workflows/deploy.yml) the backend to the droplet over SSH when main is green.
 - **Evaluation** — answer-quality eval vs baseline (LangSmith) **and** an offline adversarial **safety eval** (injection 5/5, PII 2/2): `python -m evals.run_safety_eval`.
+- **Complete data lifecycle** — deleting a topic or document removes vectors from Qdrant, rows from Postgres, and the raw file from Cloudinary (or local disk) atomically. ([`topic_service.py`](backend/app/services/topic_service.py))
 
 ## 🏗️ Architecture
 
