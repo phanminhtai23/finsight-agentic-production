@@ -124,3 +124,18 @@ async def list_messages(
     if conversation is None or conversation.user_id != user.id:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return [MessageOut.model_validate(m) for m in await repo.list_messages(conversation_id)]
+
+
+@router.delete("/{conversation_id}", status_code=204)
+async def delete_conversation(
+    conversation_id: uuid.UUID,
+    user: CurrentUserDep,
+    repo: ConversationRepoDep,
+    session: SessionDep,
+) -> None:
+    """Delete a conversation and all its messages."""
+    conversation = await repo.get(conversation_id)
+    if conversation is None or conversation.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    await repo.delete(conversation)
+    await session.commit()

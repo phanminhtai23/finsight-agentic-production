@@ -64,3 +64,6 @@ class ConversationRepository:
             .order_by(Message.created_at.asc())
         )
         return list((await self.session.scalars(stmt)).all())
+
+    async def delete(self, conversation: Conversation) -> None:
+        await self.session.delete(conversation)
